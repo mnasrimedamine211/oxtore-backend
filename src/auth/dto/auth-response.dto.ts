@@ -10,10 +10,15 @@ export class AuthResponseDto {
   @ApiProperty()
   user: {
     id: string;
-    email: string;
     fullName: string;
+    email: string;
+    phone: string | null;
+    avatar: string | null;
     role: string;
+    ownedBoutiqueIds: string[];
+    activeBoutiqueId: string | null;
+    permissions: string[];
     isVerified: boolean;
-    profileCompleted: boolean;
+    createdAt: Date;
   };
 }

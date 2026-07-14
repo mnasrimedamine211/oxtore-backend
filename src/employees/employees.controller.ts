@@ -20,33 +20,37 @@ import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decor
 @ApiTags('Employees')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('employees')
+@Controller()
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
-  @Post()
+  @Post('boutiques/:boutiqueId/employees')
   @ApiOperation({ summary: 'Add an employee to a boutique' })
-  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateEmployeeDto) {
-    return this.employeesService.create(user.sub, dto);
+  create(
+    @CurrentUser() user: JwtPayload,
+    @Param('boutiqueId') boutiqueId: string,
+    @Body() dto: CreateEmployeeDto,
+  ) {
+    return this.employeesService.create(user.sub, boutiqueId, dto);
   }
 
-  @Get()
+  @Get('boutiques/:boutiqueId/employees')
   @ApiOperation({ summary: 'List employees for a boutique' })
   findAll(
     @CurrentUser() user: JwtPayload,
-    @Query('boutiqueId') boutiqueId: string,
+    @Param('boutiqueId') boutiqueId: string,
     @Query() query: PaginationDto,
   ) {
     return this.employeesService.findAll(user.sub, boutiqueId, query);
   }
 
-  @Get(':id')
+  @Get('employees/:id')
   @ApiOperation({ summary: 'Get employee by ID' })
   findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.employeesService.findOne(user.sub, id);
   }
 
-  @Patch(':id')
+  @Patch('employees/:id')
   @ApiOperation({ summary: 'Update employee' })
   update(
     @CurrentUser() user: JwtPayload,
@@ -56,13 +60,13 @@ export class EmployeesController {
     return this.employeesService.update(user.sub, id, dto);
   }
 
-  @Delete(':id')
+  @Delete('employees/:id')
   @ApiOperation({ summary: 'Soft delete employee' })
   remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.employeesService.remove(user.sub, id);
   }
 
-  @Get(':id/stats')
+  @Get('employees/:id/stats')
   @ApiOperation({ summary: 'Get employee sales statistics' })
   getStats(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.employeesService.getStats(user.sub, id);

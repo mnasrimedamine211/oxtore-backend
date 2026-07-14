@@ -2,18 +2,28 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
+export interface AdminStat {
+  key: string;
+  label: string;
+  value: string;
+  icon: string;
+  colorClass: string;
+  trend: string;
+  trendColorClass: string;
+}
+
 @Injectable()
 export class AdminService {
   constructor(private prisma: PrismaService) {}
 
-  async getStats() {
+  async getStats(): Promise<AdminStat[]> {
     const [
       totalUsers,
       totalBoutiques,
       totalProducts,
       totalSales,
       totalOrders,
-      totalRevenue,
+      totalRevenueAgg,
       activeBoutiques,
       pendingBoutiques,
     ] = await Promise.all([
@@ -30,16 +40,33 @@ export class AdminService {
       this.prisma.boutique.count({ where: { deletedAt: null, status: 'pending' } }),
     ]);
 
-    return {
-      totalUsers,
-      totalBoutiques,
-      totalProducts,
-      totalSales,
-      totalOrders,
-      totalRevenue: totalRevenue._sum.total || 0,
-      activeBoutiques,
-      pendingBoutiques,
-    };
+    const totalRevenue = Number(totalRevenueAgg._sum.total || 0);
+
+    const makeStat = (
+      key: string,
+      label: string,
+      value: number,
+      icon: string,
+    ): AdminStat => ({
+      key,
+      label,
+      value: value.toLocaleString(),
+      icon,
+      colorClass: 'text-primary',
+      trend: '+0%',
+      trendColorClass: 'text-neutral',
+    });
+
+    return [
+      makeStat('totalUsers', 'Total Users', totalUsers, 'people'),
+      makeStat('totalBoutiques', 'Total Boutiques', totalBoutiques, 'storefront'),
+      makeStat('totalProducts', 'Total Products', totalProducts, 'cube'),
+      makeStat('totalSales', 'Total Sales', totalSales, 'cart'),
+      makeStat('totalOrders', 'Total Orders', totalOrders, 'receipt'),
+      makeStat('totalRevenue', 'Total Revenue', totalRevenue, 'cash'),
+      makeStat('activeBoutiques', 'Active Boutiques', activeBoutiques, 'checkmark-circle'),
+      makeStat('pendingBoutiques', 'Pending Boutiques', pendingBoutiques, 'time'),
+    ];
   }
 
   async getRecentActivity(limit = 10) {

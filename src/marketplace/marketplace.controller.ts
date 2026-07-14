@@ -14,7 +14,14 @@ export class MarketplaceController {
   @Get('products')
   @ApiOperation({ summary: 'Browse marketplace products (all active products from all boutiques)' })
   getProducts(
-    @Query() query: PaginationDto & { category?: string; minPrice?: string; maxPrice?: string },
+    @Query() query: PaginationDto & {
+      category?: string;
+      minPrice?: string;
+      maxPrice?: string;
+      condition?: string;
+      saleType?: string;
+      q?: string;
+    },
   ) {
     const parsed = {
       ...query,

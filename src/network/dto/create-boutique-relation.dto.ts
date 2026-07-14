@@ -1,8 +1,8 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsEnum } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 import { BoutiqueRelationType } from '@prisma/client';
 
-export class CreateBoutiqueRequestDto {
+export class CreateBoutiqueRelationDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
@@ -17,8 +17,8 @@ export class CreateBoutiqueRequestDto {
   @IsEnum(BoutiqueRelationType)
   type: BoutiqueRelationType;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
   @IsString()
-  message?: string;
+  @IsNotEmpty()
+  approvedBy: string;
 }

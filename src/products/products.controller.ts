@@ -13,6 +13,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { UpdateProductStockDto } from './dto/update-product-stock.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
@@ -20,36 +21,41 @@ import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decor
 @ApiTags('Products')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('products')
+@Controller()
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
-  @Post()
-  @ApiOperation({ summary: 'Create a product' })
-  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateProductDto) {
-    return this.productsService.create(user.sub, dto);
+  @Post('boutiques/:boutiqueId/products')
+  @ApiOperation({ summary: 'Create a product in a boutique' })
+  create(
+    @CurrentUser() user: JwtPayload,
+    @Param('boutiqueId') boutiqueId: string,
+    @Body() dto: CreateProductDto,
+  ) {
+    return this.productsService.create(user.sub, boutiqueId, dto);
   }
 
-  @Get()
-  @ApiOperation({ summary: 'List products (filter by ownerBoutiqueId, category)' })
+  @Get('boutiques/:boutiqueId/products')
+  @ApiOperation({ summary: 'List products for a boutique (filter by category, isActive)' })
   findAll(
     @CurrentUser() user: JwtPayload,
-    @Query() query: PaginationDto & { ownerBoutiqueId?: string; category?: string; isActive?: string },
+    @Param('boutiqueId') boutiqueId: string,
+    @Query() query: PaginationDto & { category?: string; isActive?: string },
   ) {
     const parsed = {
       ...query,
       isActive: query.isActive === 'true' ? true : query.isActive === 'false' ? false : undefined,
     };
-    return this.productsService.findAll(user.sub, parsed);
+    return this.productsService.findAll(user.sub, boutiqueId, parsed);
   }
 
-  @Get(':id')
+  @Get('products/:id')
   @ApiOperation({ summary: 'Get product by ID' })
   findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.productsService.findOne(user.sub, id);
   }
 
-  @Patch(':id')
+  @Patch('products/:id')
   @ApiOperation({ summary: 'Update product' })
   update(
     @CurrentUser() user: JwtPayload,
@@ -59,7 +65,17 @@ export class ProductsController {
     return this.productsService.update(user.sub, id, dto);
   }
 
-  @Delete(':id')
+  @Patch('products/:id/stock')
+  @ApiOperation({ summary: 'Decrement product stock after a sale' })
+  updateStock(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: UpdateProductStockDto,
+  ) {
+    return this.productsService.updateStock(user.sub, id, dto);
+  }
+
+  @Delete('products/:id')
   @ApiOperation({ summary: 'Soft delete product' })
   remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.productsService.remove(user.sub, id);

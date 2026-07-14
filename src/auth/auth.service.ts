@@ -48,11 +48,6 @@ export class AuthService {
 
     const hashedPassword = await argon2.hash(dto.password);
 
-    // Create auth user via Supabase is handled by the frontend SDK;
-    // here we create the profile record linked to auth.users.
-    // In production, the frontend calls Supabase auth.signUp and then
-    // calls our API to create the profile. For a standalone backend,
-    // we create a profile that will be linked when the user signs in.
     const profile = await this.prisma.profile.create({
       data: {
         id: crypto.randomUUID(),
@@ -64,8 +59,7 @@ export class AuthService {
       },
     });
 
-    // Store hashed password in a separate mechanism (auth.users password is managed by Supabase)
-    // For standalone mode, we store it in metadata
+    // Password hash is stored in metadata since profiles has no dedicated password column
     await this.prisma.profile.update({
       where: { id: profile.id },
       data: { metadata: { hashedPassword } as any },
@@ -80,7 +74,7 @@ export class AuthService {
 
     return {
       ...tokens,
-      user: this.formatUser(profile),
+      user: await this.formatUser(profile),
     };
   }
 
@@ -107,7 +101,7 @@ export class AuthService {
     const tokens = await this.generateTokens(profile);
     return {
       ...tokens,
-      user: this.formatUser(profile),
+      user: await this.formatUser(profile),
     };
   }
 
@@ -250,7 +244,7 @@ export class AuthService {
     const tokens = await this.generateTokens(profile);
     return {
       ...tokens,
-      user: this.formatUser(profile),
+      user: await this.formatUser(profile),
     };
   }
 
@@ -277,6 +271,8 @@ export class AuthService {
   // ============================================
   // PRIVATE HELPERS
   // ============================================
+  // NOTE: formatUser is async because it needs to query the user's
+  // BoutiqueOwner rows to build ownedBoutiqueIds.
 
   private async generateTokens(profile: any) {
     const payload: JwtPayload = {
@@ -300,14 +296,24 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  private formatUser(profile: any) {
+  private async formatUser(profile: any) {
+    const ownedBoutiques = await this.prisma.boutiqueOwner.findMany({
+      where: { userId: profile.id },
+      select: { boutiqueId: true },
+    });
+
     return {
       id: profile.id,
-      email: profile.email,
       fullName: profile.fullName,
+      email: profile.email,
+      phone: profile.phone,
+      avatar: profile.avatar,
       role: profile.role,
+      ownedBoutiqueIds: ownedBoutiques.map((o) => o.boutiqueId),
+      activeBoutiqueId: profile.activeBoutiqueId,
+      permissions: profile.permissions,
       isVerified: profile.isVerified,
-      profileCompleted: !!profile.fullName && !!profile.phone,
+      createdAt: profile.createdAt,
     };
   }
 

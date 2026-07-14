@@ -6,6 +6,7 @@ import {
   UseGuards,
   Param,
   Post,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UsersService } from './users.service';
@@ -36,6 +37,12 @@ export class UsersController {
     return this.usersService.updateProfile(user.sub, dto);
   }
 
+  @Get('me/settings')
+  @ApiOperation({ summary: 'Get current user settings (language, currency, notifications)' })
+  getSettings(@CurrentUser() user: JwtPayload) {
+    return this.usersService.getSettings(user.sub);
+  }
+
   @Patch('me/settings')
   @ApiOperation({ summary: 'Update user settings (language, currency, notifications)' })
   updateSettings(
@@ -45,6 +52,9 @@ export class UsersController {
     return this.usersService.updateSettings(user.sub, dto);
   }
 
+  // NOTE: the frontend contract wants buyer-facing stats here
+  // ({ ordersCount, wishlistCount, rating }); see the comment above
+  // UsersService.getStats for why that isn't implemented yet.
   @Get('me/stats')
   @ApiOperation({ summary: 'Get user statistics (sales, products, boutiques, wallet)' })
   getStats(@CurrentUser() user: JwtPayload) {
@@ -58,5 +68,72 @@ export class UsersController {
     @Param('boutiqueId') boutiqueId: string,
   ) {
     return this.usersService.setActiveBoutique(user.sub, boutiqueId);
+  }
+
+  // ============================================
+  // Self-or-admin :userId variants
+  // ============================================
+
+  @Get(':userId')
+  @ApiOperation({ summary: 'Get a user profile by id (self or admin)' })
+  getProfileById(
+    @CurrentUser() user: JwtPayload,
+    @Param('userId') userId: string,
+  ) {
+    this.assertSelfOrAdmin(user, userId);
+    return this.usersService.getProfile(userId);
+  }
+
+  @Patch(':userId')
+  @ApiOperation({ summary: 'Update a user profile by id (self or admin)' })
+  updateProfileById(
+    @CurrentUser() user: JwtPayload,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    this.assertSelfOrAdmin(user, userId);
+    return this.usersService.updateProfile(userId, dto);
+  }
+
+  @Get(':userId/settings')
+  @ApiOperation({ summary: 'Get a user settings by id (self or admin)' })
+  getSettingsById(
+    @CurrentUser() user: JwtPayload,
+    @Param('userId') userId: string,
+  ) {
+    this.assertSelfOrAdmin(user, userId);
+    return this.usersService.getSettings(userId);
+  }
+
+  @Patch(':userId/settings')
+  @ApiOperation({ summary: 'Update a user settings by id (self or admin)' })
+  updateSettingsById(
+    @CurrentUser() user: JwtPayload,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateSettingsDto,
+  ) {
+    this.assertSelfOrAdmin(user, userId);
+    return this.usersService.updateSettings(userId, dto);
+  }
+
+  // NOTE: the frontend contract wants buyer-facing stats here
+  // ({ ordersCount, wishlistCount, rating }); see the comment above
+  // UsersService.getStats for why that isn't implemented yet.
+  @Get(':userId/stats')
+  @ApiOperation({ summary: 'Get a user statistics by id (self or admin)' })
+  getStatsById(
+    @CurrentUser() user: JwtPayload,
+    @Param('userId') userId: string,
+  ) {
+    this.assertSelfOrAdmin(user, userId);
+    return this.usersService.getStats(userId);
+  }
+
+  private assertSelfOrAdmin(user: JwtPayload, userId: string) {
+    if (user.sub !== userId && user.role !== 'ADMIN') {
+      throw new ForbiddenException(
+        'You do not have access to this resource',
+      );
+    }
   }
 }

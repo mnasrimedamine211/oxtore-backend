@@ -1,9 +1,17 @@
 import { Module } from '@nestjs/common';
-import { NetworkController } from './network.controller';
+import {
+  BoutiqueRequestsController,
+  BoutiqueRelationsController,
+  BoutiqueNetworkProductsController,
+} from './network.controller';
 import { NetworkService } from './network.service';
 
 @Module({
-  controllers: [NetworkController],
+  controllers: [
+    BoutiqueRequestsController,
+    BoutiqueRelationsController,
+    BoutiqueNetworkProductsController,
+  ],
   providers: [NetworkService],
   exports: [NetworkService],
 })

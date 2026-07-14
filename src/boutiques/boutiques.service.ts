@@ -32,7 +32,7 @@ export class BoutiquesService {
       data: { boutiqueId: boutique.id, userId },
     });
 
-    return this.formatBoutique(boutique);
+    return this.getFormattedBoutique(boutique.id);
   }
 
   async findAll(userId: string, query: PaginationDto) {
@@ -54,13 +54,70 @@ export class BoutiquesService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { _count: { select: { products: true, employees: true } } },
+        include: {
+          _count: { select: { products: true, employees: true } },
+          owners: { select: { userId: true } },
+          manager: { select: { fullName: true } },
+        },
       }),
       this.prisma.boutique.count({ where }),
     ]);
 
+    const revenueMap = await this.getRevenueMap(boutiques.map((b) => b.id));
+
     return {
-      data: boutiques.map((b) => this.formatBoutique(b)),
+      data: boutiques.map((b) =>
+        this.formatBoutique({ ...b, _revenue: revenueMap.get(b.id) || 0 }),
+      ),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      },
+    };
+  }
+
+  async findDiscoverable(
+    currentUserId: string,
+    excludeUserId: string | undefined,
+    query: PaginationDto,
+  ) {
+    const targetUserId = excludeUserId || currentUserId;
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where = {
+      status: 'active' as const,
+      deletedAt: null,
+      managerId: { not: targetUserId },
+      owners: { none: { userId: targetUserId } },
+    };
+
+    const [boutiques, total] = await Promise.all([
+      this.prisma.boutique.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: { select: { products: true, employees: true } },
+          owners: { select: { userId: true } },
+          manager: { select: { fullName: true } },
+        },
+      }),
+      this.prisma.boutique.count({ where }),
+    ]);
+
+    const revenueMap = await this.getRevenueMap(boutiques.map((b) => b.id));
+
+    return {
+      data: boutiques.map((b) =>
+        this.formatBoutique({ ...b, _revenue: revenueMap.get(b.id) || 0 }),
+      ),
       meta: {
         page,
         limit,
@@ -85,16 +142,26 @@ export class BoutiquesService {
       include: {
         owners: { include: { user: true } },
         employees: { where: { deletedAt: null } },
+        manager: { select: { fullName: true } },
         _count: { select: { products: true, sales: true } },
       },
     });
     if (!boutique) throw new NotFoundException('Boutique not found');
-    return this.formatBoutique(boutique);
+
+    const revenueAgg = await this.prisma.sale.aggregate({
+      where: { boutiqueId: id, deletedAt: null, status: 'completed' },
+      _sum: { total: true },
+    });
+
+    return this.formatBoutique({
+      ...boutique,
+      _revenue: Number(revenueAgg._sum.total || 0),
+    });
   }
 
   async update(userId: string, id: string, dto: UpdateBoutiqueDto) {
     await this.checkAccess(userId, id);
-    const boutique = await this.prisma.boutique.update({
+    await this.prisma.boutique.update({
       where: { id },
       data: {
         ...(dto.name && { name: dto.name }),
@@ -107,7 +174,7 @@ export class BoutiquesService {
         ...(dto.categories && { categories: dto.categories }),
       },
     });
-    return this.formatBoutique(boutique);
+    return this.getFormattedBoutique(id);
   }
 
   async remove(userId: string, id: string) {
@@ -178,7 +245,58 @@ export class BoutiquesService {
     return boutique;
   }
 
+  /**
+   * Sum of `total` for a boutique's completed sales, batched across many
+   * boutiques in a single groupBy query (avoids N+1 when formatting a list).
+   */
+  private async getRevenueMap(boutiqueIds: string[]): Promise<Map<string, number>> {
+    if (boutiqueIds.length === 0) return new Map();
+    const rows = await this.prisma.sale.groupBy({
+      by: ['boutiqueId'],
+      where: { boutiqueId: { in: boutiqueIds }, deletedAt: null, status: 'completed' },
+      _sum: { total: true },
+    });
+    return new Map(rows.map((r) => [r.boutiqueId, Number(r._sum.total || 0)]));
+  }
+
+  /** Refetches a single boutique with all fields needed for formatBoutique. */
+  private async getFormattedBoutique(id: string) {
+    const boutique = await this.prisma.boutique.findUnique({
+      where: { id },
+      include: {
+        manager: { select: { fullName: true } },
+        owners: { select: { userId: true } },
+        _count: { select: { products: true, employees: true } },
+      },
+    });
+    if (!boutique) throw new NotFoundException('Boutique not found');
+
+    const revenueAgg = await this.prisma.sale.aggregate({
+      where: { boutiqueId: id, deletedAt: null, status: 'completed' },
+      _sum: { total: true },
+    });
+
+    return this.formatBoutique({
+      ...boutique,
+      _revenue: Number(revenueAgg._sum.total || 0),
+    });
+  }
+
   private formatBoutique(boutique: any) {
+    const employeeCount =
+      boutique._count?.employees ??
+      (Array.isArray(boutique.employees) ? boutique.employees.length : 0);
+    const productCount = boutique._count?.products ?? 0;
+    const ownerIds = Array.isArray(boutique.owners)
+      ? boutique.owners.map((o: any) => o.userId)
+      : [];
+    const managerName = boutique.manager?.fullName ?? null;
+    const revenue = boutique._revenue ?? 0;
+    const hasOwnerDetails =
+      Array.isArray(boutique.owners) &&
+      boutique.owners.length > 0 &&
+      boutique.owners[0].user !== undefined;
+
     return {
       id: boutique.id,
       name: boutique.name,
@@ -191,10 +309,17 @@ export class BoutiquesService {
       currency: boutique.currency,
       categories: boutique.categories,
       managerId: boutique.managerId,
+      managerName,
       createdAt: boutique.createdAt,
+      employeeCount,
+      productCount,
+      revenue,
+      ownerIds,
       ...(boutique._count && { counts: boutique._count }),
-      ...(boutique.owners && { owners: boutique.owners.map((o: any) => ({ id: o.user.id, fullName: o.user.fullName, email: o.user.email })) }),
-      ...(boutique.employees && { employees: boutique.employees }),
+      ...(hasOwnerDetails && {
+        owners: boutique.owners.map((o: any) => ({ id: o.user.id, fullName: o.user.fullName, email: o.user.email })),
+      }),
+      ...(Array.isArray(boutique.employees) && { employees: boutique.employees }),
     };
   }
 }

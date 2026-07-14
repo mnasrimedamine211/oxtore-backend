@@ -13,6 +13,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BoutiquesService } from './boutiques.service';
 import { CreateBoutiqueDto } from './dto/create-boutique.dto';
 import { UpdateBoutiqueDto } from './dto/update-boutique.dto';
+import { DiscoverableBoutiquesDto } from './dto/discoverable-boutiques.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
@@ -34,6 +35,23 @@ export class BoutiquesController {
   @ApiOperation({ summary: 'List user boutiques' })
   findAll(@CurrentUser() user: JwtPayload, @Query() query: PaginationDto) {
     return this.boutiquesService.findAll(user.sub, query);
+  }
+
+  @Get('discoverable')
+  @ApiOperation({
+    summary:
+      'List active boutiques the given user is not already an owner or manager of',
+  })
+  findDiscoverable(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: DiscoverableBoutiquesDto,
+  ) {
+    const { excludeUserId, ...pagination } = query;
+    return this.boutiquesService.findDiscoverable(
+      user.sub,
+      excludeUserId,
+      pagination,
+    );
   }
 
   @Get(':id')

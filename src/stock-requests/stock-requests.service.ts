@@ -7,6 +7,10 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { CreateStockRequestDto } from './dto/create-stock-request.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import {
+  stockRequestStatusToApi,
+  stockRequestStatusFromApi,
+} from '../common/utils/enum-case.util';
 
 @Injectable()
 export class StockRequestsService {
@@ -58,10 +62,18 @@ export class StockRequestsService {
       });
     }
 
-    return request;
+    return this.formatStockRequest(request);
   }
 
-  async findAll(userId: string, query: PaginationDto & { type?: 'sent' | 'received'; boutiqueId?: string; status?: string }) {
+  async findAll(
+    userId: string,
+    query: PaginationDto & {
+      type?: 'sent' | 'received';
+      boutiqueId?: string;
+      boutiqueIds?: string;
+      status?: string;
+    },
+  ) {
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
@@ -69,7 +81,17 @@ export class StockRequestsService {
     const userBoutiques = await this.getUserBoutiqueIds(userId);
     const where: any = { deletedAt: null };
 
-    if (query.boutiqueId) {
+    if (query.boutiqueIds) {
+      const requestedIds = query.boutiqueIds
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+      const accessibleIds = requestedIds.filter((id) => userBoutiques.includes(id));
+      where.OR = [
+        { requesterId: { in: accessibleIds } },
+        { receiverId: { in: accessibleIds } },
+      ];
+    } else if (query.boutiqueId) {
       if (!userBoutiques.includes(query.boutiqueId)) {
         throw new ForbiddenException('Access denied to this boutique');
       }
@@ -90,7 +112,10 @@ export class StockRequestsService {
       ];
     }
 
-    if (query.status) where.status = query.status;
+    if (query.status) {
+      const dbStatus = stockRequestStatusFromApi(query.status);
+      if (dbStatus) where.status = dbStatus;
+    }
 
     const [requests, total] = await Promise.all([
       this.prisma.stockRequest.findMany({
@@ -104,7 +129,7 @@ export class StockRequestsService {
     ]);
 
     return {
-      data: requests,
+      data: requests.map((r) => this.formatStockRequest(r)),
       meta: {
         page,
         limit,
@@ -117,6 +142,12 @@ export class StockRequestsService {
   }
 
   async findOne(userId: string, id: string) {
+    const request = await this.getRequestForUser(userId, id);
+    return this.formatStockRequest(request);
+  }
+
+  /** Fetches the raw (unformatted, DB-cased) stock request, enforcing access. Internal use only. */
+  private async getRequestForUser(userId: string, id: string) {
     const request = await this.prisma.stockRequest.findFirst({
       where: { id, deletedAt: null },
       include: { product: true, requester: true, receiver: true },
@@ -132,7 +163,7 @@ export class StockRequestsService {
   }
 
   async approve(userId: string, id: string) {
-    const request = await this.findOne(userId, id);
+    const request = await this.getRequestForUser(userId, id);
 
     // Only receiver can approve
     const userBoutiques = await this.getUserBoutiqueIds(userId);
@@ -152,7 +183,7 @@ export class StockRequestsService {
       throw new BadRequestException('Receiver has insufficient stock');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.stockRequest.update({
         where: { id },
         data: { status: 'approved' },
@@ -176,10 +207,12 @@ export class StockRequestsService {
 
       return updated;
     });
+
+    return this.formatStockRequest(updated);
   }
 
-  async reject(userId: string, id: string, reason?: string) {
-    const request = await this.findOne(userId, id);
+  async reject(userId: string, id: string, rejectionReason?: string) {
+    const request = await this.getRequestForUser(userId, id);
 
     const userBoutiques = await this.getUserBoutiqueIds(userId);
     if (!userBoutiques.includes(request.receiverId)) {
@@ -190,10 +223,10 @@ export class StockRequestsService {
       throw new BadRequestException('Only pending requests can be rejected');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.stockRequest.update({
         where: { id },
-        data: { status: 'rejected', note: reason || request.note },
+        data: { status: 'rejected', rejectionReason: rejectionReason ?? null },
       });
 
       // Notify requester
@@ -206,7 +239,7 @@ export class StockRequestsService {
             userId: requester.managerId,
             type: 'stock_request',
             title: 'Stock Request Rejected',
-            message: `Your stock request has been rejected${reason ? `: ${reason}` : ''}`,
+            message: `Your stock request has been rejected${rejectionReason ? `: ${rejectionReason}` : ''}`,
             data: { stockRequestId: id },
           },
         });
@@ -214,10 +247,12 @@ export class StockRequestsService {
 
       return updated;
     });
+
+    return this.formatStockRequest(updated);
   }
 
   async fulfill(userId: string, id: string) {
-    const request = await this.findOne(userId, id);
+    const request = await this.getRequestForUser(userId, id);
 
     const userBoutiques = await this.getUserBoutiqueIds(userId);
     if (!userBoutiques.includes(request.receiverId)) {
@@ -236,7 +271,7 @@ export class StockRequestsService {
       throw new BadRequestException('Insufficient stock to fulfill');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       // 1. Update request status
       const updated = await tx.stockRequest.update({
         where: { id },
@@ -313,10 +348,12 @@ export class StockRequestsService {
 
       return updated;
     });
+
+    return this.formatStockRequest(updated);
   }
 
   async cancel(userId: string, id: string) {
-    const request = await this.findOne(userId, id);
+    const request = await this.getRequestForUser(userId, id);
     const userBoutiques = await this.getUserBoutiqueIds(userId);
     if (!userBoutiques.includes(request.requesterId)) {
       throw new ForbiddenException('Only the requesting boutique can cancel');
@@ -326,10 +363,12 @@ export class StockRequestsService {
       throw new BadRequestException('Only pending requests can be cancelled');
     }
 
-    return this.prisma.stockRequest.update({
+    const updated = await this.prisma.stockRequest.update({
       where: { id },
       data: { status: 'cancelled' },
     });
+
+    return this.formatStockRequest(updated);
   }
 
   private async getUserBoutiqueIds(userId: string): Promise<string[]> {
@@ -345,5 +384,10 @@ export class StockRequestsService {
     if (!userBoutiques.includes(boutiqueId)) {
       throw new ForbiddenException('Access denied to this boutique');
     }
+  }
+
+  /** Converts the DB-cased `status` to the uppercase API contract value. */
+  private formatStockRequest<T extends { status: string }>(request: T): T {
+    return { ...request, status: stockRequestStatusToApi(request.status) };
   }
 }

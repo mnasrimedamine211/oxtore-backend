@@ -28,9 +28,4 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsIn(['ADMIN', 'MANAGER', 'SUPERVISOR', 'SELLER', 'USER'])
   role?: string;
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  boutiqueId: string;
 }

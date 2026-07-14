@@ -29,10 +29,19 @@ export class StockRequestsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List stock requests (filter by type: sent/received, boutiqueId, status)' })
+  @ApiOperation({
+    summary:
+      'List stock requests (filter by type: sent/received, boutiqueId, boutiqueIds (comma-separated, sent-by or received-by), status)',
+  })
   findAll(
     @CurrentUser() user: JwtPayload,
-    @Query() query: PaginationDto & { type?: 'sent' | 'received'; boutiqueId?: string; status?: string },
+    @Query()
+    query: PaginationDto & {
+      type?: 'sent' | 'received';
+      boutiqueId?: string;
+      boutiqueIds?: string;
+      status?: string;
+    },
   ) {
     return this.stockRequestsService.findAll(user.sub, query);
   }
@@ -54,9 +63,9 @@ export class StockRequestsController {
   reject(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Body('reason') reason?: string,
+    @Body('rejectionReason') rejectionReason?: string,
   ) {
-    return this.stockRequestsService.reject(user.sub, id, reason);
+    return this.stockRequestsService.reject(user.sub, id, rejectionReason);
   }
 
   @Patch(':id/fulfill')

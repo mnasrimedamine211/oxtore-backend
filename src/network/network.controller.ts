@@ -3,7 +3,6 @@ import {
   Get,
   Post,
   Patch,
-  Delete,
   Body,
   Param,
   Query,
@@ -12,6 +11,12 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { NetworkService } from './network.service';
 import { CreateBoutiqueRequestDto } from './dto/create-boutique-request.dto';
+import { AcceptBoutiqueRequestDto } from './dto/accept-boutique-request.dto';
+import { RejectBoutiqueRequestDto } from './dto/reject-boutique-request.dto';
+import { QueryBoutiqueRequestDto } from './dto/query-boutique-request.dto';
+import { CreateBoutiqueRelationDto } from './dto/create-boutique-relation.dto';
+import { UpdateBoutiqueRelationDto } from './dto/update-boutique-relation.dto';
+import { QueryBoutiqueRelationDto } from './dto/query-boutique-relation.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
@@ -19,59 +24,87 @@ import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decor
 @ApiTags('Network')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('network')
-export class NetworkController {
+@Controller('boutique-requests')
+export class BoutiqueRequestsController {
   constructor(private readonly networkService: NetworkService) {}
 
-  @Post('requests')
+  @Post()
   @ApiOperation({ summary: 'Create a boutique network request' })
   createRequest(@CurrentUser() user: JwtPayload, @Body() dto: CreateBoutiqueRequestDto) {
     return this.networkService.createRequest(user.sub, dto);
   }
 
-  @Get('requests')
-  @ApiOperation({ summary: 'List boutique network requests (filter by type, boutiqueId, status)' })
-  findAllRequests(
-    @CurrentUser() user: JwtPayload,
-    @Query() query: PaginationDto & { type?: 'sent' | 'received'; boutiqueId?: string; status?: string },
-  ) {
+  @Get()
+  @ApiOperation({ summary: 'List boutique network requests (filter by boutiqueIds, type, boutiqueId, status)' })
+  findAllRequests(@CurrentUser() user: JwtPayload, @Query() query: QueryBoutiqueRequestDto) {
     return this.networkService.findAllRequests(user.sub, query);
   }
 
-  @Patch('requests/:id/accept')
+  @Patch(':id/accept')
   @ApiOperation({ summary: 'Accept boutique request (transactional: creates relation + notification)' })
-  acceptRequest(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.networkService.acceptRequest(user.sub, id);
-  }
-
-  @Patch('requests/:id/reject')
-  @ApiOperation({ summary: 'Reject boutique request' })
-  rejectRequest(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.networkService.rejectRequest(user.sub, id);
-  }
-
-  @Get('relations')
-  @ApiOperation({ summary: 'List boutique relations (network connections)' })
-  findAllRelations(
+  acceptRequest(
     @CurrentUser() user: JwtPayload,
-    @Query() query: PaginationDto & { boutiqueId?: string },
+    @Param('id') id: string,
+    @Body() dto: AcceptBoutiqueRequestDto,
   ) {
+    return this.networkService.acceptRequest(user.sub, id, dto);
+  }
+
+  @Patch(':id/reject')
+  @ApiOperation({ summary: 'Reject boutique request' })
+  rejectRequest(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: RejectBoutiqueRequestDto,
+  ) {
+    return this.networkService.rejectRequest(user.sub, id, dto);
+  }
+}
+
+@ApiTags('Network')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller('boutique-relations')
+export class BoutiqueRelationsController {
+  constructor(private readonly networkService: NetworkService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'List boutique relations (network connections)' })
+  findAllRelations(@CurrentUser() user: JwtPayload, @Query() query: QueryBoutiqueRelationDto) {
     return this.networkService.findAllRelations(user.sub, query);
   }
 
-  @Delete('relations/:id')
-  @ApiOperation({ summary: 'Remove a boutique relation' })
-  removeRelation(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.networkService.removeRelation(user.sub, id);
+  @Post()
+  @ApiOperation({ summary: 'Create a boutique relation directly' })
+  createRelation(@CurrentUser() user: JwtPayload, @Body() dto: CreateBoutiqueRelationDto) {
+    return this.networkService.createRelation(user.sub, dto);
   }
 
-  @Get('boutiques/:boutiqueId/products')
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update a boutique relation status' })
+  updateRelation(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: UpdateBoutiqueRelationDto,
+  ) {
+    return this.networkService.updateRelation(user.sub, id, dto);
+  }
+}
+
+@ApiTags('Network')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller('boutiques')
+export class BoutiqueNetworkProductsController {
+  constructor(private readonly networkService: NetworkService) {}
+
+  @Get(':id/network-products')
   @ApiOperation({ summary: 'Get network products for a boutique (products from related boutiques)' })
   getNetworkProducts(
     @CurrentUser() user: JwtPayload,
-    @Param('boutiqueId') boutiqueId: string,
+    @Param('id') id: string,
     @Query() query: PaginationDto,
   ) {
-    return this.networkService.getNetworkProducts(user.sub, boutiqueId, query);
+    return this.networkService.getNetworkProducts(user.sub, id, query);
   }
 }

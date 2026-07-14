@@ -7,8 +7,38 @@ import {
   IsNumber,
   Min,
   IsInt,
+  IsIn,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class WholesaleTierInputDto {
+  @ApiProperty({ example: 10 })
+  @IsInt()
+  @Min(1)
+  minQty: number;
+
+  @ApiProperty({ example: 9.99 })
+  @IsNumber()
+  @Min(0)
+  unitPrice: number;
+}
+
+export class ProductCommissionInputDto {
+  @ApiProperty({ enum: ['seller', 'supervisor', 'manager'] })
+  @IsIn(['seller', 'supervisor', 'manager'])
+  actor: 'seller' | 'supervisor' | 'manager';
+
+  @ApiProperty({ enum: ['percentage', 'fixed'] })
+  @IsIn(['percentage', 'fixed'])
+  type: 'percentage' | 'fixed';
+
+  @ApiPropertyOptional({ nullable: true, example: 5 })
+  @IsOptional()
+  @IsNumber()
+  value: number | null;
+}
 
 export class CreateProductDto {
   @ApiProperty({ example: 'Product Name' })
@@ -30,11 +60,6 @@ export class CreateProductDto {
   @IsOptional()
   @IsArray()
   images?: string[];
-
-  @ApiProperty({ description: 'Owner boutique ID' })
-  @IsString()
-  @IsNotEmpty()
-  ownerBoutiqueId: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -79,4 +104,18 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ type: [WholesaleTierInputDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WholesaleTierInputDto)
+  wholesaleTiers?: WholesaleTierInputDto[];
+
+  @ApiPropertyOptional({ type: [ProductCommissionInputDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductCommissionInputDto)
+  commissions?: ProductCommissionInputDto[];
 }

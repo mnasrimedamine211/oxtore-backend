@@ -48,6 +48,16 @@ export class SalesController {
     return this.salesService.getStats(user.sub, boutiqueId, dateFrom, dateTo);
   }
 
+  @Get('commissions')
+  @ApiOperation({ summary: 'Get commission totals per seller for a boutique' })
+  getCommissions(
+    @CurrentUser() user: JwtPayload,
+    @Query('boutiqueId') boutiqueId: string,
+    @Query('sellerId') sellerId?: string,
+  ) {
+    return this.salesService.getCommissions(user.sub, boutiqueId, sellerId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get sale by ID' })
   findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {

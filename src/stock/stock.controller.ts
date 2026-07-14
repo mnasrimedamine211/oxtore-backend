@@ -14,6 +14,7 @@ import { StockService } from './stock.service';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
+import { AdjustStockMovementDto } from './dto/adjust-stock-movement.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
@@ -67,6 +68,19 @@ export class StockController {
   @ApiOperation({ summary: 'Adjust stock (in/out) with inventory movement' })
   adjust(@CurrentUser() user: JwtPayload, @Body() dto: AdjustStockDto) {
     return this.stockService.adjustStock(user.sub, dto);
+  }
+
+  @Post(':productId/movements')
+  @ApiOperation({
+    summary:
+      'Adjust stock for a product (in/out/adj) — path-based alias for POST /stock/adjust; boutiqueId is derived from the product owner boutique',
+  })
+  createMovement(
+    @CurrentUser() user: JwtPayload,
+    @Param('productId') productId: string,
+    @Body() dto: AdjustStockMovementDto,
+  ) {
+    return this.stockService.adjustStockForProduct(user.sub, productId, dto);
   }
 
   @Get('movements')

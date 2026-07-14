@@ -3,8 +3,10 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { Order } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { OrderResponseDto } from './dto/order-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
@@ -33,7 +35,7 @@ export class OrdersService {
     const shipping = dto.shipping || 0;
     const total = subtotal - discount + tax + shipping;
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       // 1. Create the order
       const order = await tx.order.create({
         data: {
@@ -124,6 +126,8 @@ export class OrdersService {
 
       return order;
     });
+
+    return this.toOrderResponse(created);
   }
 
   async findAll(userId: string, query: PaginationDto & { status?: string }) {
@@ -145,7 +149,7 @@ export class OrdersService {
     ]);
 
     return {
-      data: orders,
+      data: await Promise.all(orders.map((order) => this.toOrderResponse(order))),
       meta: {
         page,
         limit,
@@ -162,7 +166,7 @@ export class OrdersService {
       where: { id, userId, deletedAt: null },
     });
     if (!order) throw new NotFoundException('Order not found');
-    return order;
+    return this.toOrderResponse(order);
   }
 
   async cancel(userId: string, id: string) {
@@ -233,5 +237,70 @@ export class OrdersService {
 
       return updated;
     });
+  }
+
+  /**
+   * Maps a raw `Order` row to the flat frontend read-model:
+   * { id, reference, productName, productImage, amount, currency, status, createdAt, seller }
+   *
+   * `Order` has no `reference`/`productName`/`productImage`/`currency`/`seller` columns, so
+   * these are derived here:
+   *  - reference: synthesized deterministically from the id ('ORD-' + first 8 chars, uppercased).
+   *  - productName/productImage: `items` (Json) only stores {productId, quantity, unitPrice,
+   *    boutiqueId} per line (see `create()` above) — no name/image is persisted on the order
+   *    itself — so we look up the first item's Product for its name/images.
+   *  - currency/seller: best-effort resolved from the first item's boutique (boutiqueId is
+   *    stored directly on each item). Order does not track a currency at all today; if the
+   *    boutique lookup fails for any reason we fall back to 'USD'.
+   */
+  private async toOrderResponse(order: Order): Promise<OrderResponseDto> {
+    const items = Array.isArray(order.items) ? (order.items as any[]) : [];
+    const firstItem = items[0];
+
+    let productName = 'Unknown product';
+    let productImage: string | null = null;
+    // NOTE: Order has no currency column — 'USD' is a placeholder default when the
+    // first item's boutique can't be resolved.
+    let currency = 'USD';
+    let seller: string | null = null;
+
+    if (firstItem) {
+      const [product, boutique] = await Promise.all([
+        firstItem.productId
+          ? this.prisma.product.findUnique({
+              where: { id: firstItem.productId },
+              select: { name: true, images: true },
+            })
+          : null,
+        firstItem.boutiqueId
+          ? this.prisma.boutique.findUnique({
+              where: { id: firstItem.boutiqueId },
+              select: { name: true, currency: true },
+            })
+          : null,
+      ]);
+
+      const firstItemName = product?.name ?? 'Unknown product';
+      productName =
+        items.length > 1 ? `${firstItemName} +${items.length - 1} more` : firstItemName;
+      productImage = product?.images?.[0] ?? null;
+
+      if (boutique) {
+        currency = boutique.currency;
+        seller = boutique.name;
+      }
+    }
+
+    return {
+      id: order.id,
+      reference: `ORD-${order.id.slice(0, 8).toUpperCase()}`,
+      productName,
+      productImage,
+      amount: Number(order.total),
+      currency,
+      status: order.status,
+      createdAt: order.createdAt,
+      seller,
+    };
   }
 }

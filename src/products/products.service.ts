@@ -2,18 +2,26 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { UpdateProductStockDto } from './dto/update-product-stock.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
+
+const PRODUCT_INCLUDE = {
+  stockItems: { where: { deletedAt: null } },
+  wholesaleTiers: true,
+  productCommissions: true,
+} as const;
 
 @Injectable()
 export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(userId: string, dto: CreateProductDto) {
-    await this.checkBoutiqueAccess(userId, dto.ownerBoutiqueId);
+  async create(userId: string, boutiqueId: string, dto: CreateProductDto) {
+    await this.checkBoutiqueAccess(userId, boutiqueId);
 
     const product = await this.prisma.product.create({
       data: {
@@ -21,7 +29,7 @@ export class ProductsService {
         description: dto.description || '',
         category: dto.category || '',
         images: dto.images || [],
-        ownerBoutiqueId: dto.ownerBoutiqueId,
+        ownerBoutiqueId: boutiqueId,
         sku: dto.sku,
         barcode: dto.barcode,
         cost: dto.cost || 0,
@@ -30,28 +38,37 @@ export class ProductsService {
         minWholesaleQty: dto.minWholesaleQty || 0,
         commission: dto.commission || 0,
         isActive: dto.isActive ?? true,
+        wholesaleTiers: {
+          create: (dto.wholesaleTiers || []).map((tier) => ({
+            minQty: tier.minQty,
+            unitPrice: tier.unitPrice,
+          })),
+        },
+        productCommissions: {
+          create: (dto.commissions || []).map((commission) => ({
+            actor: commission.actor as any,
+            type: commission.type as any,
+            value: commission.value,
+          })),
+        },
       },
+      include: PRODUCT_INCLUDE,
     });
     return this.formatProduct(product);
   }
 
-  async findAll(userId: string, query: PaginationDto & { ownerBoutiqueId?: string; category?: string; isActive?: boolean }) {
+  async findAll(
+    userId: string,
+    boutiqueId: string,
+    query: PaginationDto & { category?: string; isActive?: boolean },
+  ) {
+    await this.checkBoutiqueAccess(userId, boutiqueId);
+
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const userBoutiques = await this.getUserBoutiqueIds(userId);
-    const where: any = { deletedAt: null };
-
-    if (query.ownerBoutiqueId) {
-      if (!userBoutiques.includes(query.ownerBoutiqueId)) {
-        throw new ForbiddenException('Access denied to this boutique');
-      }
-      where.ownerBoutiqueId = query.ownerBoutiqueId;
-    } else {
-      where.ownerBoutiqueId = { in: userBoutiques };
-    }
-
+    const where: any = { ownerBoutiqueId: boutiqueId, deletedAt: null };
     if (query.category) where.category = query.category;
     if (query.isActive !== undefined) where.isActive = query.isActive;
     if (query.search) {
@@ -68,7 +85,7 @@ export class ProductsService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { stockItems: { where: { deletedAt: null } } },
+        include: PRODUCT_INCLUDE,
       }),
       this.prisma.product.count({ where }),
     ]);
@@ -90,16 +107,13 @@ export class ProductsService {
     const product = await this.prisma.product.findFirst({
       where: { id, deletedAt: null },
       include: {
-        stockItems: { where: { deletedAt: null } },
+        ...PRODUCT_INCLUDE,
         ownerBoutique: true,
       },
     });
     if (!product) throw new NotFoundException('Product not found');
 
-    const userBoutiques = await this.getUserBoutiqueIds(userId);
-    if (!userBoutiques.includes(product.ownerBoutiqueId)) {
-      throw new ForbiddenException('Access denied to this product');
-    }
+    await this.checkBoutiqueAccess(userId, product.ownerBoutiqueId);
 
     return this.formatProduct(product);
   }
@@ -126,7 +140,27 @@ export class ProductsService {
         ...(dto.minWholesaleQty !== undefined && { minWholesaleQty: dto.minWholesaleQty }),
         ...(dto.commission !== undefined && { commission: dto.commission }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+        ...(dto.wholesaleTiers !== undefined && {
+          wholesaleTiers: {
+            deleteMany: {},
+            create: dto.wholesaleTiers.map((tier) => ({
+              minQty: tier.minQty,
+              unitPrice: tier.unitPrice,
+            })),
+          },
+        }),
+        ...(dto.commissions !== undefined && {
+          productCommissions: {
+            deleteMany: {},
+            create: dto.commissions.map((commission) => ({
+              actor: commission.actor as any,
+              type: commission.type as any,
+              value: commission.value,
+            })),
+          },
+        }),
       },
+      include: PRODUCT_INCLUDE,
     });
     return this.formatProduct(updated);
   }
@@ -143,6 +177,60 @@ export class ProductsService {
       data: { deletedAt: new Date() },
     });
     return { message: 'Product deleted successfully' };
+  }
+
+  async updateStock(userId: string, id: string, dto: UpdateProductStockDto) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    await this.checkBoutiqueAccess(userId, product.ownerBoutiqueId);
+
+    await this.prisma.$transaction(async (tx) => {
+      const stockItem = await tx.stockItem.findFirst({
+        where: { productId: product.id, boutiqueId: product.ownerBoutiqueId, deletedAt: null },
+      });
+      if (!stockItem || stockItem.available < dto.quantitySold) {
+        throw new BadRequestException('Insufficient stock to fulfill this sale');
+      }
+
+      const newQuantity = stockItem.quantity - dto.quantitySold;
+      const newAvailable = stockItem.available - dto.quantitySold;
+
+      await tx.stockItem.update({
+        where: { id: stockItem.id },
+        data: {
+          quantity: newQuantity,
+          available: newAvailable,
+          status: this.computeStockStatus(newQuantity, stockItem.safetyStock, stockItem.reorderLevel) as any,
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          productId: product.id,
+          boutiqueId: product.ownerBoutiqueId,
+          type: 'out',
+          reason: 'sale',
+          referenceType: 'product_stock_update',
+          referenceId: product.id,
+          quantity: dto.quantitySold,
+          createdBy: userId,
+        },
+      });
+    });
+
+    return this.findOne(userId, id);
+  }
+
+  /**
+   * Mirrors the in_stock/low_stock/out_of_stock threshold logic used for StockItem.status
+   * elsewhere in the stock domain (quantity vs. safetyStock/reorderLevel).
+   */
+  private computeStockStatus(quantity: number, safetyStock: number, reorderLevel: number) {
+    if (quantity <= 0) return 'out_of_stock';
+    if (quantity <= reorderLevel || quantity <= safetyStock) return 'low_stock';
+    return 'in_stock';
   }
 
   private async getUserBoutiqueIds(userId: string): Promise<string[]> {
@@ -179,6 +267,15 @@ export class ProductsService {
       metadata: product.metadata,
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
+      wholesaleTiers: (product.wholesaleTiers || []).map((tier: any) => ({
+        minQty: tier.minQty,
+        unitPrice: tier.unitPrice,
+      })),
+      commissions: (product.productCommissions || []).map((commission: any) => ({
+        actor: commission.actor,
+        type: commission.type,
+        value: commission.value,
+      })),
       ...(product.stockItems && { stock: product.stockItems }),
       ...(product.ownerBoutique && { ownerBoutique: { id: product.ownerBoutique.id, name: product.ownerBoutique.name } }),
     };

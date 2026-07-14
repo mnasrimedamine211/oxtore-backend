@@ -13,11 +13,11 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 export class EmployeesService {
   constructor(private prisma: PrismaService) {}
 
-  async create(userId: string, dto: CreateEmployeeDto) {
-    await this.checkBoutiqueAccess(userId, dto.boutiqueId);
+  async create(userId: string, boutiqueId: string, dto: CreateEmployeeDto) {
+    await this.checkBoutiqueAccess(userId, boutiqueId);
 
     const existing = await this.prisma.employee.findFirst({
-      where: { email: dto.email, boutiqueId: dto.boutiqueId, deletedAt: null },
+      where: { email: dto.email, boutiqueId, deletedAt: null },
     });
     if (existing) throw new ConflictException('Employee already exists in this boutique');
 
@@ -28,15 +28,16 @@ export class EmployeesService {
         phone: dto.phone,
         avatar: dto.avatar,
         role: (dto.role as any) || 'SELLER',
-        boutiqueId: dto.boutiqueId,
+        boutiqueId,
         status: 'pending',
       },
+      include: { boutique: true },
     });
 
     // Notify boutique managers/owners
-    await this.notifyBoutiqueManagers(dto.boutiqueId, 'employee', 'New Employee Added', `${dto.fullName} has been added`);
+    await this.notifyBoutiqueManagers(boutiqueId, 'employee', 'New Employee Added', `${dto.fullName} has been added`);
 
-    return employee;
+    return this.formatEmployee(employee);
   }
 
   async findAll(userId: string, boutiqueId: string, query: PaginationDto) {
@@ -63,13 +64,13 @@ export class EmployeesService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { _count: { select: { sales: true } } },
+        include: { boutique: true, _count: { select: { sales: true } } },
       }),
       this.prisma.employee.count({ where }),
     ]);
 
     return {
-      data: employees,
+      data: employees.map((e) => this.formatEmployee(e)),
       meta: {
         page,
         limit,
@@ -88,7 +89,7 @@ export class EmployeesService {
     });
     if (!employee) throw new NotFoundException('Employee not found');
     await this.checkBoutiqueAccess(userId, employee.boutiqueId);
-    return employee;
+    return this.formatEmployee(employee);
   }
 
   async update(userId: string, id: string, dto: UpdateEmployeeDto) {
@@ -98,7 +99,7 @@ export class EmployeesService {
     if (!employee) throw new NotFoundException('Employee not found');
     await this.checkBoutiqueAccess(userId, employee.boutiqueId);
 
-    return this.prisma.employee.update({
+    const updated = await this.prisma.employee.update({
       where: { id },
       data: {
         ...(dto.fullName && { fullName: dto.fullName }),
@@ -107,7 +108,9 @@ export class EmployeesService {
         ...(dto.role && { role: dto.role as any }),
         ...(dto.status && { status: dto.status as any }),
       },
+      include: { boutique: true },
     });
+    return this.formatEmployee(updated);
   }
 
   async remove(userId: string, id: string) {
@@ -138,6 +141,13 @@ export class EmployeesService {
       totalRevenue: sales._sum.total || 0,
       status: employee.status,
       role: employee.role,
+    };
+  }
+
+  private formatEmployee(employee: any) {
+    return {
+      ...employee,
+      boutiqueName: employee.boutique?.name ?? null,
     };
   }
 

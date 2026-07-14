@@ -49,16 +49,12 @@ export class FeedService {
     return {
       data: items.map((p) => ({
         ...p,
-        likesCount: p._count?.feedLikes || 0,
-        isLiked: (p.feedLikes?.length || 0) > 0,
+        likes: p._count?.feedLikes || 0,
+        liked: (p.feedLikes?.length || 0) > 0,
         _count: undefined,
         feedLikes: undefined,
       })),
-      meta: {
-        nextCursor,
-        hasMore,
-        limit,
-      },
+      nextCursor,
     };
   }
 
@@ -77,13 +73,13 @@ export class FeedService {
         where: { userId_productId: { userId, productId } },
       });
       const count = await this.prisma.feedLike.count({ where: { productId } });
-      return { liked: false, likesCount: count };
+      return { liked: false, likes: count };
     } else {
       await this.prisma.feedLike.create({
         data: { userId, productId },
       });
       const count = await this.prisma.feedLike.count({ where: { productId } });
-      return { liked: true, likesCount: count };
+      return { liked: true, likes: count };
     }
   }
 

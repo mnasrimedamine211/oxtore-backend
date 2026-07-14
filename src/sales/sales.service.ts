@@ -177,6 +177,30 @@ export class SalesService {
     };
   }
 
+  async getCommissions(userId: string, boutiqueId: string, sellerId?: string) {
+    await this.checkBoutiqueAccess(userId, boutiqueId);
+
+    const where: any = { boutiqueId, deletedAt: null };
+    if (sellerId) where.sellerId = sellerId;
+
+    const sales = await this.prisma.sale.findMany({
+      where,
+      select: { sellerId: true, commissions: true },
+    });
+
+    const totals = new Map<string, number>();
+    for (const sale of sales) {
+      if (!sale.sellerId) continue;
+
+      const commissions = Array.isArray(sale.commissions) ? (sale.commissions as any[]) : [];
+      const saleTotal = commissions.reduce((sum, entry) => sum + (Number(entry?.amount) || 0), 0);
+
+      totals.set(sale.sellerId, (totals.get(sale.sellerId) || 0) + saleTotal);
+    }
+
+    return Array.from(totals.entries()).map(([sellerId, total]) => ({ sellerId, total }));
+  }
+
   private async checkBoutiqueAccess(userId: string, boutiqueId: string) {
     const boutique = await this.prisma.boutique.findFirst({
       where: {

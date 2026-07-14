@@ -62,6 +62,12 @@ export class AuthController {
     return this.authService.forgotPassword(dto);
   }
 
+  // NOTE: the frontend contract expects dedicated POST /auth/otp/send,
+  // /auth/otp/verify and /auth/otp/resend endpoints. We currently only
+  // expose /auth/verify-otp (below) and /auth/reset-password, with no
+  // standalone "send"/"resend" routes. Renaming/adding routes to match
+  // the contract needs an OTP provider + rate-limiting design decision,
+  // so it's left for whoever picks that up next rather than done here.
   @Public()
   @Post('verify-otp')
   @ApiOperation({ summary: 'Verify email OTP code' })

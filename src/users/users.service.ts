@@ -10,11 +10,6 @@ export class UsersService {
   async getProfile(userId: string) {
     const profile = await this.prisma.profile.findUnique({
       where: { id: userId },
-      include: {
-        activeBoutique: true,
-        ownedBoutiques: { include: { boutique: true } },
-        wallet: true,
-      },
     });
     if (!profile) throw new NotFoundException('User not found');
     return this.formatProfile(profile);
@@ -30,6 +25,21 @@ export class UsersService {
       },
     });
     return this.formatProfile(profile);
+  }
+
+  async getSettings(userId: string) {
+    const profile = await this.prisma.profile.findUnique({
+      where: { id: userId },
+    });
+    if (!profile) throw new NotFoundException('User not found');
+
+    const settings = (profile.metadata as any)?.settings || {};
+    return {
+      language: settings.language || 'en',
+      currency: settings.currency || 'USD',
+      emailNotifications: settings.emailNotifications ?? true,
+      pushNotifications: settings.pushNotifications ?? true,
+    };
   }
 
   async updateSettings(userId: string, dto: UpdateSettingsDto) {
@@ -62,6 +72,10 @@ export class UsersService {
     };
   }
 
+  // NOTE: the frontend contract wants buyer-facing stats here
+  // ({ ordersCount, wishlistCount, rating }), but this schema has no
+  // wishlist/rating concept — returning the current seller-facing stats
+  // as-is; reshaping this needs a product decision, not just a shape fix.
   async getStats(userId: string) {
     const [salesCount, productsCount, boutiquesCount, wallet] = await Promise.all([
       this.prisma.sale.count({
@@ -102,25 +116,23 @@ export class UsersService {
     return this.formatProfile(updated);
   }
 
-  private formatProfile(profile: any) {
+  private async formatProfile(profile: any) {
+    const ownedBoutiques = await this.prisma.boutiqueOwner.findMany({
+      where: { userId: profile.id },
+      select: { boutiqueId: true },
+    });
+
     return {
       id: profile.id,
-      email: profile.email,
       fullName: profile.fullName,
+      email: profile.email,
       phone: profile.phone,
       avatar: profile.avatar,
       role: profile.role,
+      ownedBoutiqueIds: ownedBoutiques.map((o) => o.boutiqueId),
+      activeBoutiqueId: profile.activeBoutiqueId,
+      permissions: profile.permissions,
       isVerified: profile.isVerified,
-      activeBoutique: profile.activeBoutique
-        ? {
-            id: profile.activeBoutique.id,
-            name: profile.activeBoutique.name,
-            currency: profile.activeBoutique.currency,
-          }
-        : null,
-      wallet: profile.wallet
-        ? { balance: profile.wallet.balance, currency: profile.wallet.currency }
-        : null,
       createdAt: profile.createdAt,
     };
   }
