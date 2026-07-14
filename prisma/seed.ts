@@ -61,30 +61,46 @@ async function main() {
   // ============================================
   // 4. USERS
   // ============================================
-  const adminPass = await argon2.hash('Admin123!@#');
+  const adminPass = await argon2.hash('mooz55678252');
   const managerPass = await argon2.hash('Manager123!@#');
   const sellerPass = await argon2.hash('Seller123!@#');
   const userPass = await argon2.hash('User123!@#');
 
-  const adminId = crypto.randomUUID();
-  const managerId = crypto.randomUUID();
-  const supervisorId = crypto.randomUUID();
-  const sellerId = crypto.randomUUID();
-  const buyerId = crypto.randomUUID();
-
-  const users = [
-    { id: adminId, fullName: 'System Admin', email: 'admin@oxtore.com', phone: '+212600000001', role: 'ADMIN', isVerified: true, metadata: { hashedPassword: adminPass } },
-    { id: managerId, fullName: 'Youssef Bennani', email: 'manager@oxtore.com', phone: '+212600000002', role: 'MANAGER', isVerified: true, metadata: { hashedPassword: managerPass } },
-    { id: supervisorId, fullName: 'Fatima Zahra', email: 'supervisor@oxtore.com', phone: '+212600000003', role: 'SUPERVISOR', isVerified: true, metadata: { hashedPassword: sellerPass } },
-    { id: sellerId, fullName: 'Omar El Idrissi', email: 'seller@oxtore.com', phone: '+212600000004', role: 'SELLER', isVerified: true, metadata: { hashedPassword: sellerPass } },
-    { id: buyerId, fullName: 'Sara Moussaoui', email: 'buyer@oxtore.com', phone: '+212600000005', role: 'USER', isVerified: true, metadata: { hashedPassword: userPass } },
+  const userDefs = [
+    { fullName: 'System Admin', email: 'admin@oxtore.com', phone: '+212600000001', role: 'ADMIN', isVerified: true, hashedPassword: adminPass },
+    { fullName: 'Youssef Bennani', email: 'manager@oxtore.com', phone: '+212600000002', role: 'MANAGER', isVerified: true, hashedPassword: managerPass },
+    { fullName: 'Fatima Zahra', email: 'supervisor@oxtore.com', phone: '+212600000003', role: 'SUPERVISOR', isVerified: true, hashedPassword: sellerPass },
+    { fullName: 'Omar El Idrissi', email: 'seller@oxtore.com', phone: '+212600000004', role: 'SELLER', isVerified: true, hashedPassword: sellerPass },
+    { fullName: 'Sara Moussaoui', email: 'buyer@oxtore.com', phone: '+212600000005', role: 'USER', isVerified: true, hashedPassword: userPass },
   ];
 
-  for (const u of users) {
-    const existing = await prisma.profile.findUnique({ where: { email: u.email } });
-    if (!existing) await prisma.profile.create({ data: u as any });
+  // Resolve to existing profile ids where already present, so downstream
+  // records (settings, boutiques, wallets, ...) reference real DB rows
+  // instead of freshly generated ids that were never persisted.
+  const users: { id: string; role: string }[] = [];
+  for (const def of userDefs) {
+    const existing = await prisma.profile.findUnique({ where: { email: def.email } });
+    if (existing) {
+      users.push({ id: existing.id, role: existing.role });
+    } else {
+      const id = crypto.randomUUID();
+      await prisma.profile.create({
+        data: {
+          id,
+          fullName: def.fullName,
+          email: def.email,
+          phone: def.phone,
+          role: def.role as any,
+          isVerified: def.isVerified,
+          metadata: { hashedPassword: def.hashedPassword } as any,
+        },
+      });
+      users.push({ id, role: def.role });
+    }
   }
   console.log(`Seeded ${users.length} users`);
+
+  const [adminId, managerId, supervisorId, sellerId, buyerId] = users.map((u) => u.id);
 
   // ============================================
   // 5. USER SETTINGS
@@ -108,13 +124,8 @@ async function main() {
   // ============================================
   // 6. BOUTIQUES
   // ============================================
-  const boutique1Id = crypto.randomUUID();
-  const boutique2Id = crypto.randomUUID();
-  const boutique3Id = crypto.randomUUID();
-
-  const boutiques = [
+  const boutiqueDefs = [
     {
-      id: boutique1Id,
       name: 'TechWorld Casablanca',
       logo: 'https://images.pexels.com/photos/3184298/pexels-photo-3184298.jpeg',
       address: '123 Boulevard Mohammed V, Casablanca',
@@ -127,7 +138,6 @@ async function main() {
       categories: ['electronics', 'home-garden'],
     },
     {
-      id: boutique2Id,
       name: 'Mode Maison Rabat',
       logo: 'https://images.pexels.com/photos/4498526/pexels-photo-4498526.jpeg',
       address: '456 Avenue Hassan II, Rabat',
@@ -140,7 +150,6 @@ async function main() {
       categories: ['clothing', 'home-garden', 'beauty'],
     },
     {
-      id: boutique3Id,
       name: 'AutoParts Marrakech',
       logo: 'https://images.pexels.com/photos/3806288/pexels-photo-3806288.jpeg',
       address: '789 Rue de la Koutoubia, Marrakech',
@@ -154,18 +163,26 @@ async function main() {
     },
   ];
 
-  for (const b of boutiques) {
-    const existing = await prisma.boutique.findUnique({ where: { id: b.id } });
-    if (!existing) await prisma.boutique.create({ data: b as any });
+  // Resolve to existing boutique ids by name so reseeding doesn't create duplicates
+  const boutiqueIds: string[] = [];
+  for (const def of boutiqueDefs) {
+    const existing = await prisma.boutique.findFirst({ where: { name: def.name } });
+    if (existing) {
+      boutiqueIds.push(existing.id);
+    } else {
+      const id = crypto.randomUUID();
+      await prisma.boutique.create({ data: { id, ...def } as any });
+      boutiqueIds.push(id);
+    }
   }
+  const [boutique1Id, boutique2Id, boutique3Id] = boutiqueIds;
 
   // Boutique owners
-  for (const bId of [boutique1Id, boutique2Id, boutique3Id]) {
-    const ownerKey = `${bId}_${adminId}`;
+  for (const bId of boutiqueIds) {
     const existing = await prisma.boutiqueOwner.findUnique({ where: { boutiqueId_userId: { boutiqueId: bId, userId: adminId } } });
     if (!existing) await prisma.boutiqueOwner.create({ data: { boutiqueId: bId, userId: adminId } });
   }
-  console.log(`Seeded ${boutiques.length} boutiques with owners`);
+  console.log(`Seeded ${boutiqueDefs.length} boutiques with owners`);
 
   // ============================================
   // 7. BOUTIQUE RELATIONS & REQUESTS
@@ -216,15 +233,9 @@ async function main() {
   // ============================================
   // 9. PRODUCTS
   // ============================================
-  const product1Id = crypto.randomUUID();
-  const product2Id = crypto.randomUUID();
-  const product3Id = crypto.randomUUID();
-  const product4Id = crypto.randomUUID();
-  const product5Id = crypto.randomUUID();
-
-  const products = [
+  const productDefs = [
     {
-      id: product1Id, name: 'iPhone 15 Pro Max', sku: 'TW-IP15PM-001', barcode: '194253123456',
+      name: 'iPhone 15 Pro Max', sku: 'TW-IP15PM-001', barcode: '194253123456',
       category: 'electronics', brand: 'Apple', description: 'Latest iPhone with titanium body and A17 Pro chip',
       ownerBoutiqueId: boutique1Id, createdBy: managerId,
       isPublic: true, visibility: 'public', published: true, publishedAt: new Date(),
@@ -238,7 +249,7 @@ async function main() {
       images: ['https://images.pexels.com/photos/788946/pexels-photo-788946.jpeg'],
     },
     {
-      id: product2Id, name: 'Samsung Galaxy S24 Ultra', sku: 'TW-SGS24U-002', barcode: '887276987654',
+      name: 'Samsung Galaxy S24 Ultra', sku: 'TW-SGS24U-002', barcode: '887276987654',
       category: 'electronics', brand: 'Samsung', description: 'Galaxy AI features with S Pen and 200MP camera',
       ownerBoutiqueId: boutique1Id, createdBy: managerId,
       isPublic: true, visibility: 'public', published: true, publishedAt: new Date(),
@@ -252,7 +263,7 @@ async function main() {
       images: ['https://images.pexels.com/photos/1647946/pexels-photo-1647946.jpeg'],
     },
     {
-      id: product3Id, name: 'Designer Leather Jacket', sku: 'MM-DLJ-003', barcode: '123456789012',
+      name: 'Designer Leather Jacket', sku: 'MM-DLJ-003', barcode: '123456789012',
       category: 'clothing', brand: 'Mode Maison', description: 'Handcrafted leather jacket, premium quality',
       ownerBoutiqueId: boutique2Id, createdBy: supervisorId,
       isPublic: true, visibility: 'public', published: true, publishedAt: new Date(),
@@ -266,7 +277,7 @@ async function main() {
       images: ['https://images.pexels.com/photos/1183266/pexels-photo-1183266.jpeg'],
     },
     {
-      id: product4Id, name: 'Car Floor Mats Set', sku: 'AP-CFM-004', barcode: '987654321098',
+      name: 'Car Floor Mats Set', sku: 'AP-CFM-004', barcode: '987654321098',
       category: 'automobile', brand: 'AutoParts Pro', description: 'Universal fit rubber floor mats, set of 4',
       ownerBoutiqueId: boutique3Id, createdBy: sellerId,
       isPublic: true, visibility: 'public', published: true, publishedAt: new Date(),
@@ -280,7 +291,7 @@ async function main() {
       images: ['https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg'],
     },
     {
-      id: product5Id, name: 'Wireless Charging Pad', sku: 'TW-WCP-005', barcode: '555123456789',
+      name: 'Wireless Charging Pad', sku: 'TW-WCP-005', barcode: '555123456789',
       category: 'electronics', brand: 'Anker', description: '15W fast wireless charging pad with LED indicator',
       ownerBoutiqueId: boutique1Id, createdBy: managerId,
       isPublic: false, visibility: 'private', published: false,
@@ -295,11 +306,20 @@ async function main() {
     },
   ];
 
-  for (const p of products) {
-    const existing = await prisma.product.findUnique({ where: { id: p.id } });
-    if (!existing) await prisma.product.create({ data: p as any });
+  // Resolve to existing product ids by sku+boutique so reseeding doesn't create duplicates
+  const productIds: string[] = [];
+  for (const def of productDefs) {
+    const existing = await prisma.product.findFirst({ where: { sku: def.sku, ownerBoutiqueId: def.ownerBoutiqueId } });
+    if (existing) {
+      productIds.push(existing.id);
+    } else {
+      const id = crypto.randomUUID();
+      await prisma.product.create({ data: { id, ...def } as any });
+      productIds.push(id);
+    }
   }
-  console.log(`Seeded ${products.length} products`);
+  const [product1Id, product2Id, product3Id, product4Id, product5Id] = productIds;
+  console.log(`Seeded ${productDefs.length} products`);
 
   // ============================================
   // 10. WHOLESALE TIERS
@@ -537,7 +557,7 @@ async function main() {
   console.log('Seed completed successfully!');
   console.log('========================================');
   console.log('\nTest Accounts:');
-  console.log('  Admin:     admin@oxtore.com / Admin123!@#');
+  console.log('  Admin:     admin@oxtore.com / mooz55678252');
   console.log('  Manager:   manager@oxtore.com / Manager123!@#');
   console.log('  Supervisor: supervisor@oxtore.com / Seller123!@#');
   console.log('  Seller:    seller@oxtore.com / Seller123!@#');

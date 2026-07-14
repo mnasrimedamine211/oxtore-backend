@@ -20,7 +20,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
-    let code = 'INTERNAL_ERROR';
+    let code: string | undefined;
     let errors: string[] | undefined;
 
     if (exception instanceof HttpException) {
@@ -31,18 +31,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
       } else if (typeof resp === 'object' && resp !== null) {
         const r = resp as any;
         message = r.message || message;
-        code = r.code || code;
+        code = r.code;
         if (Array.isArray(r.message)) {
           errors = r.message;
           message = 'Validation failed';
           code = 'VALIDATION_ERROR';
         }
       }
+      code = code || this.codeForStatus(status);
     } else if (exception instanceof PrismaClientKnownRequestError) {
       if (exception.code === 'P2002') {
         status = HttpStatus.CONFLICT;
         message = 'A record with this value already exists';
-        code = 'DUPLICATE_ENTRY';
+        code = 'CONFLICT';
       } else if (exception.code === 'P2025') {
         status = HttpStatus.NOT_FOUND;
         message = 'Record not found';
@@ -54,6 +55,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     } else if (exception instanceof Error) {
       message = exception.message;
+      code = 'INTERNAL_ERROR';
+    } else {
+      code = 'INTERNAL_ERROR';
     }
 
     if (status >= 500) {
@@ -71,5 +75,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
       code,
       ...(errors ? { errors } : {}),
     });
+  }
+
+  private codeForStatus(status: number): string {
+    switch (status) {
+      case HttpStatus.BAD_REQUEST:
+        return 'VALIDATION_ERROR';
+      case HttpStatus.UNAUTHORIZED:
+        return 'UNAUTHORIZED';
+      case HttpStatus.FORBIDDEN:
+        return 'FORBIDDEN';
+      case HttpStatus.NOT_FOUND:
+        return 'NOT_FOUND';
+      case HttpStatus.CONFLICT:
+        return 'CONFLICT';
+      default:
+        return status >= 500 ? 'INTERNAL_ERROR' : 'ERROR';
+    }
   }
 }

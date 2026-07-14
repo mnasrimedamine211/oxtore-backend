@@ -6,15 +6,14 @@ Production-ready Node.js/NestJS backend for the Oxtore mobile marketplace platfo
 
 - **Runtime**: Node.js 20, TypeScript
 - **Framework**: NestJS 10
-- **Database**: PostgreSQL (Supabase)
+- **Database**: PostgreSQL (local)
 - **ORM**: Prisma 5
-- **Auth**: JWT (access + refresh tokens), Google OAuth
-- **OTP**: Email (Nodemailer/Gmail/Mailtrap) + WhatsApp (Twilio/Meta)
+- **Auth**: JWT (access + refresh tokens), Google OAuth (optional)
+- **OTP**: Email (Nodemailer/Gmail/Mailtrap) + WhatsApp (Twilio/Meta) — optional, falls back to console logging in development
 - **Validation**: class-validator + class-transformer
 - **Security**: Helmet, rate limiting, CORS, Argon2 password hashing, RBAC
 - **API Docs**: Swagger/OpenAPI
 - **Logging**: Winston
-- **Container**: Docker + Docker Compose
 
 ## Quick Start
 
@@ -22,7 +21,7 @@ Production-ready Node.js/NestJS backend for the Oxtore mobile marketplace platfo
 
 - Node.js >= 20
 - npm >= 10
-- Docker + Docker Compose (for local PostgreSQL, Redis, MinIO)
+- PostgreSQL 17 installed and running locally
 - Prisma CLI (`npx prisma`)
 
 ### Installation
@@ -34,17 +33,18 @@ git clone <repo-url> && cd oxtore-backend
 # 2. Install dependencies
 npm install
 
-# 3. Copy environment file
-cp .env.example .env.development
+# 3. Create the database
+#    (using psql, pgAdmin, or any PostgreSQL client)
+createdb oxtore
 
-# 4. Start infrastructure (PostgreSQL, Redis, MinIO)
-docker compose up -d postgres redis minio
+# 4. Copy environment file and configure DATABASE_URL / JWT secrets
+cp .env.example .env.development
 
 # 5. Generate Prisma client
 npx prisma generate
 
-# 6. Run database migrations (applied via Supabase MCP in this environment)
-#    For local PostgreSQL: npx prisma migrate dev --name init
+# 6. Run database migrations
+npx prisma migrate dev
 
 # 7. Run seed
 npm run seed
@@ -52,6 +52,8 @@ npm run seed
 # 8. Start the backend
 npm run start:dev
 ```
+
+External integrations (Redis, MinIO, Gmail, Twilio, Google OAuth) are entirely optional in development — the app starts and runs without any of them configured.
 
 ### Swagger
 
@@ -271,22 +273,6 @@ Change `DATABASE_URL` and `POSTGRES_*` variables. No code changes needed — Pri
 ### Redis
 Change `REDIS_HOST` and `REDIS_PORT`. No code changes needed.
 
-## Docker
-
-```bash
-# Start all services
-docker compose up -d
-
-# Start specific services
-docker compose up -d postgres redis minio
-
-# View logs
-docker compose logs -f api
-
-# Stop
-docker compose down
-```
-
 ## Prisma Commands
 
 ```bash
@@ -360,9 +346,9 @@ Winston logger with configurable log levels (`LOG_LEVEL` env var). All HTTP requ
 
 ## Backup Strategy
 
-- PostgreSQL: Use `pg_dump` or Supabase's built-in backup
-- Redis: Enable RDB snapshots or AOF persistence
-- MinIO: Versioning and lifecycle policies
+- PostgreSQL: Use `pg_dump` for local backups
+- Redis: Enable RDB snapshots or AOF persistence (if/when Redis is wired in)
+- MinIO: Versioning and lifecycle policies (if/when object storage is wired in)
 
 ## Monitoring Recommendations
 

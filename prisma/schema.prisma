@@ -1,6 +1,5 @@
 // Oxtore Prisma Schema
-// This schema mirrors the Supabase PostgreSQL database.
-// Migrations are applied via Supabase MCP tools; Prisma is used for typed queries.
+// Runs against a local PostgreSQL database; migrations are managed via Prisma Migrate.
 // Field naming follows the API Contract canonical models (§2).
 
 generator client {
