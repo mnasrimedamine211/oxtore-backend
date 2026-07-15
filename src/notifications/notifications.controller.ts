@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { QueryNotificationsDto } from './dto/query-notifications.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 
@@ -21,7 +21,7 @@ import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decor
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  private parseQuery(query: PaginationDto & { isRead?: string }) {
+  private parseQuery(query: QueryNotificationsDto) {
     return {
       ...query,
       isRead: query.isRead === 'true' ? true : query.isRead === 'false' ? false : undefined,
@@ -38,7 +38,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'List user notifications' })
   findAll(
     @CurrentUser() user: JwtPayload,
-    @Query() query: PaginationDto & { isRead?: string },
+    @Query() query: QueryNotificationsDto,
   ) {
     return this.notificationsService.findAll(user.sub, this.parseQuery(query));
   }
@@ -72,7 +72,7 @@ export class NotificationsController {
   findAllForUser(
     @CurrentUser() user: JwtPayload,
     @Param('userId') userId: string,
-    @Query() query: PaginationDto & { isRead?: string },
+    @Query() query: QueryNotificationsDto,
   ) {
     this.assertSelfOrAdmin(user, userId);
     return this.notificationsService.findAll(userId, this.parseQuery(query));

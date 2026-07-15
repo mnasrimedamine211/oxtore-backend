@@ -11,7 +11,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { StockRequestsService } from './stock-requests.service';
 import { CreateStockRequestDto } from './dto/create-stock-request.dto';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { QueryStockRequestsDto } from './dto/query-stock-requests.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 
@@ -35,13 +35,7 @@ export class StockRequestsController {
   })
   findAll(
     @CurrentUser() user: JwtPayload,
-    @Query()
-    query: PaginationDto & {
-      type?: 'sent' | 'received';
-      boutiqueId?: string;
-      boutiqueIds?: string;
-      status?: string;
-    },
+    @Query() query: QueryStockRequestsDto,
   ) {
     return this.stockRequestsService.findAll(user.sub, query);
   }

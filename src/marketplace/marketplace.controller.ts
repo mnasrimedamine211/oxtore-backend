@@ -2,6 +2,7 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { MarketplaceService } from './marketplace.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { QueryMarketplaceProductsDto } from './dto/query-marketplace-products.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @ApiTags('Marketplace')
@@ -13,16 +14,7 @@ export class MarketplaceController {
 
   @Get('products')
   @ApiOperation({ summary: 'Browse marketplace products (all active products from all boutiques)' })
-  getProducts(
-    @Query() query: PaginationDto & {
-      category?: string;
-      minPrice?: string;
-      maxPrice?: string;
-      condition?: string;
-      saleType?: string;
-      q?: string;
-    },
-  ) {
+  getProducts(@Query() query: QueryMarketplaceProductsDto) {
     const parsed = {
       ...query,
       minPrice: query.minPrice ? parseFloat(query.minPrice) : undefined,

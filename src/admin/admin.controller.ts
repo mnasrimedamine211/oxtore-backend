@@ -8,7 +8,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { QueryAdminBoutiquesDto } from './dto/query-admin-boutiques.dto';
+import { QueryAdminUsersDto } from './dto/query-admin-users.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -35,7 +36,7 @@ export class AdminController {
 
   @Get('boutiques')
   @ApiOperation({ summary: 'List all boutiques (admin only)' })
-  getBoutiques(@Query() query: PaginationDto & { status?: string }) {
+  getBoutiques(@Query() query: QueryAdminBoutiquesDto) {
     return this.adminService.getBoutiques(query);
   }
 
@@ -53,7 +54,7 @@ export class AdminController {
 
   @Get('users')
   @ApiOperation({ summary: 'List all users (admin only)' })
-  getUsers(@Query() query: PaginationDto & { role?: string }) {
+  getUsers(@Query() query: QueryAdminUsersDto) {
     return this.adminService.getUsers(query);
   }
 }

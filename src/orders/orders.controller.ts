@@ -12,7 +12,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { QueryOrdersDto } from './dto/query-orders.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 
@@ -37,7 +37,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'List user orders' })
   findAll(
     @CurrentUser() user: JwtPayload,
-    @Query() query: PaginationDto & { status?: string },
+    @Query() query: QueryOrdersDto,
   ) {
     return this.ordersService.findAll(user.sub, query);
   }
@@ -59,7 +59,7 @@ export class OrdersController {
   findAllForUser(
     @CurrentUser() user: JwtPayload,
     @Param('userId') userId: string,
-    @Query() query: PaginationDto & { status?: string },
+    @Query() query: QueryOrdersDto,
   ) {
     this.assertSelfOrAdmin(user, userId);
     return this.ordersService.findAll(userId, query);

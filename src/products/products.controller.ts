@@ -14,7 +14,7 @@ import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateProductStockDto } from './dto/update-product-stock.dto';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { QueryProductsDto } from './dto/query-products.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 
@@ -40,7 +40,7 @@ export class ProductsController {
   findAll(
     @CurrentUser() user: JwtPayload,
     @Param('boutiqueId') boutiqueId: string,
-    @Query() query: PaginationDto & { category?: string; isActive?: string },
+    @Query() query: QueryProductsDto,
   ) {
     const parsed = {
       ...query,
