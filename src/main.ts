@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import * as rateLimit from 'express-rate-limit';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -16,6 +17,11 @@ async function bootstrap() {
   const corsOrigin = configService.get<string>('app.corsOrigin') || '*';
 
   app.setGlobalPrefix(apiPrefix);
+
+  // Default Express body limit (100kb) is too small for product/boutique image uploads
+  // sent as base64 data URLs inline in the JSON body — raise it to 25mb.
+  app.use(json({ limit: '25mb' }));
+  app.use(urlencoded({ extended: true, limit: '25mb' }));
 
   app.use(helmet());
   app.enableCors({

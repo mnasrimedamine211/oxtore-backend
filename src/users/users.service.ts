@@ -77,7 +77,7 @@ export class UsersService {
   // wishlist/rating concept — returning the current seller-facing stats
   // as-is; reshaping this needs a product decision, not just a shape fix.
   async getStats(userId: string) {
-    const [salesCount, productsCount, boutiquesCount, wallet] = await Promise.all([
+    const [salesCount, productsCount, boutiquesCount] = await Promise.all([
       this.prisma.sale.count({
         where: { soldBy: userId, deletedAt: null },
       }),
@@ -87,14 +87,12 @@ export class UsersService {
       this.prisma.boutiqueOwner.count({
         where: { userId },
       }),
-      this.prisma.wallet.findUnique({ where: { userId } }),
     ]);
 
     return {
       totalSales: salesCount,
       totalProducts: productsCount,
       totalBoutiques: boutiquesCount,
-      walletBalance: wallet ? wallet.balance : 0,
     };
   }
 

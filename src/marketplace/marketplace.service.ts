@@ -106,7 +106,7 @@ export class MarketplaceService {
   async getCategories() {
     return this.prisma.category.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, icon: true },
+      select: { id: true, name: true, icon: true, slug: true },
     });
   }
 

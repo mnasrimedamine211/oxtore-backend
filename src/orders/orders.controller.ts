@@ -28,7 +28,7 @@ export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post('orders')
-  @ApiOperation({ summary: 'Create an order (checkout: stock decrease + movements + wallet payment + notification)' })
+  @ApiOperation({ summary: 'Create an order (checkout: stock decrease + movements + notification, confirmed immediately)' })
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto) {
     return this.ordersService.create(user.sub, dto);
   }
@@ -49,7 +49,7 @@ export class OrdersController {
   }
 
   @Patch('orders/:id/cancel')
-  @ApiOperation({ summary: 'Cancel order (restores stock, refunds wallet)' })
+  @ApiOperation({ summary: 'Cancel order (restores stock)' })
   cancel(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.ordersService.cancel(user.sub, id);
   }

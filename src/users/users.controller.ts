@@ -56,7 +56,7 @@ export class UsersController {
   // ({ ordersCount, wishlistCount, rating }); see the comment above
   // UsersService.getStats for why that isn't implemented yet.
   @Get('me/stats')
-  @ApiOperation({ summary: 'Get user statistics (sales, products, boutiques, wallet)' })
+  @ApiOperation({ summary: 'Get user statistics (sales, products, boutiques)' })
   getStats(@CurrentUser() user: JwtPayload) {
     return this.usersService.getStats(user.sub);
   }

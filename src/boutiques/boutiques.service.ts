@@ -90,8 +90,10 @@ export class BoutiquesService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
+    // Deliberately not filtering by status: 'active' — a newly created boutique starts
+    // 'pending' until an admin approves it, and would otherwise never be discoverable
+    // for a network partnership request even though that's exactly how it gets used.
     const where = {
-      status: 'active' as const,
       deletedAt: null,
       managerId: { not: targetUserId },
       owners: { none: { userId: targetUserId } },

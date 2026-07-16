@@ -15,7 +15,6 @@ import { EmployeesModule } from './employees/employees.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { FeedModule } from './feed/feed.module';
 import { OrdersModule } from './orders/orders.module';
-import { WalletModule } from './wallet/wallet.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { ConfigEndpointModule } from './config-endpoint/config-endpoint.module';
@@ -38,7 +37,6 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     MarketplaceModule,
     FeedModule,
     OrdersModule,
-    WalletModule,
     NotificationsModule,
     AdminModule,
     ConfigEndpointModule,

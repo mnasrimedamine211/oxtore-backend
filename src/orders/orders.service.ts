@@ -36,7 +36,7 @@ export class OrdersService {
     const total = subtotal - discount + tax + shipping;
 
     const created = await this.prisma.$transaction(async (tx) => {
-      // 1. Create the order
+      // 1. Create the order — confirmed immediately, no payment gateway/wallet check involved.
       const order = await tx.order.create({
         data: {
           userId,
@@ -46,9 +46,9 @@ export class OrdersService {
           tax,
           shipping,
           total,
-          paymentMethod: dto.paymentMethod || 'wallet',
-          paymentStatus: dto.paymentMethod === 'wallet' ? 'paid' : 'unpaid',
-          status: dto.paymentMethod === 'wallet' ? 'paid' : 'pending',
+          paymentMethod: dto.paymentMethod || 'cash',
+          paymentStatus: 'paid',
+          status: 'paid',
           shippingAddress: dto.shippingAddress,
           customerName: dto.customerName,
           customerPhone: dto.customerPhone,
@@ -82,32 +82,7 @@ export class OrdersService {
         });
       }
 
-      // 3. If wallet payment, deduct from wallet
-      if (dto.paymentMethod === 'wallet') {
-        const wallet = await tx.wallet.findUnique({ where: { userId } });
-        if (!wallet || Number(wallet.balance) < total) {
-          throw new BadRequestException('Insufficient wallet balance');
-        }
-
-        const updatedWallet = await tx.wallet.update({
-          where: { userId },
-          data: { balance: { decrement: total } },
-        });
-
-        await tx.walletTransaction.create({
-          data: {
-            walletId: updatedWallet.id,
-            type: 'order_payment',
-            amount: -total,
-            balanceAfter: updatedWallet.balance,
-            referenceId: order.id,
-            referenceType: 'order',
-            note: `Order payment`,
-          },
-        });
-      }
-
-      // 4. Notify all boutique managers
+      // 3. Notify all boutique managers
       const boutiqueIds = [...new Set(dto.items.map((i) => i.boutiqueId))];
       for (const boutiqueId of boutiqueIds) {
         const boutique = await tx.boutique.findUnique({ where: { id: boutiqueId } });
@@ -210,29 +185,6 @@ export class OrdersService {
             createdBy: userId,
           },
         });
-      }
-
-      // Refund wallet if paid with wallet
-      if (order.paymentMethod === 'wallet' && order.paymentStatus === 'paid') {
-        const wallet = await tx.wallet.findUnique({ where: { userId } });
-        if (wallet) {
-          const updatedWallet = await tx.wallet.update({
-            where: { userId },
-            data: { balance: { increment: order.total } },
-          });
-
-          await tx.walletTransaction.create({
-            data: {
-              walletId: updatedWallet.id,
-              type: 'refund',
-              amount: order.total,
-              balanceAfter: updatedWallet.balance,
-              referenceId: id,
-              referenceType: 'order',
-              note: 'Order cancellation refund',
-            },
-          });
-        }
       }
 
       return updated;

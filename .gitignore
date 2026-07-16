@@ -21,13 +21,18 @@ pnpm-debug.log*
 # ===========================
 # Environment
 # ===========================
+# All real env files are ignored — they hold live secrets (mail/SMS provider
+# credentials, JWT secrets, DB URLs). Only .env.example (placeholders only)
+# should ever be committed.
+.env
 .env.local
+.env.development
 .env.development.local
+.env.production
 .env.production.local
+.env.test
 .env.test.local
 
-# Keep these files
-!.env
 !.env.example
 
 # ===========================
