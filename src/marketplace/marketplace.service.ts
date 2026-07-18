@@ -23,6 +23,8 @@ export class MarketplaceService {
     const where: any = {
       deletedAt: null,
       isActive: true,
+      visibility: 'public',
+      ownerBoutique: { status: 'active' },
     };
 
     if (query.category) where.category = query.category;

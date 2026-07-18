@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { BoutiqueNotifyService } from '../common/services/boutique-notify.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { UpdateBoutiqueDto } from '../boutiques/dto/update-boutique.dto';
 
 export interface AdminStat {
   key: string;
@@ -14,7 +16,10 @@ export interface AdminStat {
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private boutiqueNotify: BoutiqueNotifyService,
+  ) {}
 
   async getStats(): Promise<AdminStat[]> {
     const [
@@ -104,6 +109,13 @@ export class AdminService {
 
     const where: any = { deletedAt: null };
     if (query.status) where.status = query.status;
+    if (query.search) {
+      where.OR = [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { manager: { fullName: { contains: query.search, mode: 'insensitive' } } },
+        { manager: { email: { contains: query.search, mode: 'insensitive' } } },
+      ];
+    }
 
     const [boutiques, total] = await Promise.all([
       this.prisma.boutique.findMany({
@@ -132,11 +144,42 @@ export class AdminService {
     };
   }
 
-  async approveBoutique(id: string) {
-    return this.prisma.boutique.update({
+  async approveBoutique(id: string, adminId: string) {
+    const boutique = await this.prisma.boutique.update({
       where: { id },
-      data: { status: 'active' },
+      data: {
+        status: 'active',
+        rejectionReason: null,
+        respondedAt: new Date(),
+        respondedBy: adminId,
+      },
     });
+    await this.boutiqueNotify.notifyManagers(
+      id,
+      'system',
+      'Boutique Approved',
+      `${boutique.name} has been approved and is now active.`,
+    );
+    return boutique;
+  }
+
+  async rejectBoutique(id: string, adminId: string, reason: string) {
+    const boutique = await this.prisma.boutique.update({
+      where: { id },
+      data: {
+        status: 'rejected',
+        rejectionReason: reason,
+        respondedAt: new Date(),
+        respondedBy: adminId,
+      },
+    });
+    await this.boutiqueNotify.notifyManagers(
+      id,
+      'system',
+      'Boutique Rejected',
+      `${boutique.name} was rejected: ${reason}`,
+    );
+    return boutique;
   }
 
   async suspendBoutique(id: string) {
@@ -144,6 +187,36 @@ export class AdminService {
       where: { id },
       data: { status: 'suspended' },
     });
+  }
+
+  async updateBoutique(id: string, dto: UpdateBoutiqueDto) {
+    const existing = await this.prisma.boutique.findFirst({ where: { id, deletedAt: null } });
+    if (!existing) throw new NotFoundException('Boutique not found');
+
+    return this.prisma.boutique.update({
+      where: { id },
+      data: {
+        ...(dto.name && { name: dto.name }),
+        ...(dto.logo !== undefined && { logo: dto.logo }),
+        ...(dto.address && { address: dto.address }),
+        ...(dto.phone && { phone: dto.phone }),
+        ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.language && { language: dto.language }),
+        ...(dto.currency && { currency: dto.currency }),
+        ...(dto.categories && { categories: dto.categories }),
+      },
+    });
+  }
+
+  async deleteBoutique(id: string) {
+    const existing = await this.prisma.boutique.findFirst({ where: { id, deletedAt: null } });
+    if (!existing) throw new NotFoundException('Boutique not found');
+
+    await this.prisma.boutique.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    return { message: 'Boutique deleted successfully' };
   }
 
   async getUsers(query: PaginationDto & { role?: string }) {

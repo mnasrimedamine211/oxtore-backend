@@ -105,6 +105,26 @@ export class CreateProductDto {
   @IsBoolean()
   isActive?: boolean;
 
+  @ApiPropertyOptional({ enum: ['public', 'private'], default: 'public' })
+  @IsOptional()
+  @IsIn(['public', 'private'])
+  visibility?: 'public' | 'private';
+
+  @ApiPropertyOptional({ enum: ['wholesale', 'retail', 'both'], default: 'retail' })
+  @IsOptional()
+  @IsIn(['wholesale', 'retail', 'both'])
+  saleType?: 'wholesale' | 'retail' | 'both';
+
+  @ApiPropertyOptional({ enum: ['consignment', 'direct', 'commission'], default: 'direct' })
+  @IsOptional()
+  @IsIn(['consignment', 'direct', 'commission'])
+  transactionMode?: 'consignment' | 'direct' | 'commission';
+
+  @ApiPropertyOptional({ enum: ['new', 'used'], default: 'new' })
+  @IsOptional()
+  @IsIn(['new', 'used'])
+  condition?: 'new' | 'used';
+
   @ApiPropertyOptional({ type: [WholesaleTierInputDto] })
   @IsOptional()
   @IsArray()

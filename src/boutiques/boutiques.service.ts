@@ -1,16 +1,19 @@
 import {
   Injectable,
   NotFoundException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { BoutiqueAccessService } from '../common/services/boutique-access.service';
 import { CreateBoutiqueDto } from './dto/create-boutique.dto';
 import { UpdateBoutiqueDto } from './dto/update-boutique.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class BoutiquesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private boutiqueAccess: BoutiqueAccessService,
+  ) {}
 
   async create(userId: string, dto: CreateBoutiqueDto) {
     const boutique = await this.prisma.boutique.create({
@@ -162,7 +165,7 @@ export class BoutiquesService {
   }
 
   async update(userId: string, id: string, dto: UpdateBoutiqueDto) {
-    await this.checkAccess(userId, id);
+    await this.boutiqueAccess.assertAccess(userId, id);
     await this.prisma.boutique.update({
       where: { id },
       data: {
@@ -180,7 +183,7 @@ export class BoutiquesService {
   }
 
   async remove(userId: string, id: string) {
-    await this.checkAccess(userId, id);
+    await this.boutiqueAccess.assertAccess(userId, id);
     await this.prisma.boutique.update({
       where: { id },
       data: { deletedAt: new Date() },
@@ -189,7 +192,7 @@ export class BoutiquesService {
   }
 
   async getStats(userId: string, id: string) {
-    await this.checkAccess(userId, id);
+    await this.boutiqueAccess.assertAccess(userId, id);
     const [sales, products, employees, stockItems] = await Promise.all([
       this.prisma.sale.count({ where: { boutiqueId: id, deletedAt: null } }),
       this.prisma.product.count({ where: { ownerBoutiqueId: id, deletedAt: null } }),
@@ -212,7 +215,7 @@ export class BoutiquesService {
   }
 
   async addOwner(userId: string, boutiqueId: string, newOwnerEmail: string) {
-    await this.checkAccess(userId, boutiqueId);
+    await this.boutiqueAccess.assertAccess(userId, boutiqueId);
     const newOwner = await this.prisma.profile.findUnique({
       where: { email: newOwnerEmail },
     });
@@ -225,26 +228,11 @@ export class BoutiquesService {
   }
 
   async removeOwner(userId: string, boutiqueId: string, ownerUserId: string) {
-    await this.checkAccess(userId, boutiqueId);
+    await this.boutiqueAccess.assertAccess(userId, boutiqueId);
     await this.prisma.boutiqueOwner.delete({
       where: { boutiqueId_userId: { boutiqueId, userId: ownerUserId } },
     });
     return { message: 'Owner removed successfully' };
-  }
-
-  private async checkAccess(userId: string, boutiqueId: string) {
-    const boutique = await this.prisma.boutique.findFirst({
-      where: {
-        id: boutiqueId,
-        deletedAt: null,
-        OR: [
-          { managerId: userId },
-          { owners: { some: { userId } } },
-        ],
-      },
-    });
-    if (!boutique) throw new ForbiddenException('Access denied to this boutique');
-    return boutique;
   }
 
   /**
@@ -307,6 +295,7 @@ export class BoutiquesService {
       phone: boutique.phone,
       description: boutique.description,
       status: boutique.status,
+      rejectionReason: boutique.rejectionReason ?? null,
       language: boutique.language,
       currency: boutique.currency,
       categories: boutique.categories,

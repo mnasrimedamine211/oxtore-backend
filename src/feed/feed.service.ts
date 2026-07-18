@@ -13,6 +13,8 @@ export class FeedService {
     const where: any = {
       deletedAt: null,
       isActive: true,
+      visibility: 'public',
+      ownerBoutique: { status: 'active' },
     };
 
     let products;
@@ -87,7 +89,15 @@ export class FeedService {
     const limit = query.limit || 20;
     const cursor = query.cursor;
 
-    const where: any = { userId };
+    const where: any = {
+      userId,
+      product: {
+        deletedAt: null,
+        isActive: true,
+        visibility: 'public',
+        ownerBoutique: { status: 'active' },
+      },
+    };
     let likes;
     if (cursor) {
       likes = await this.prisma.feedLike.findMany({

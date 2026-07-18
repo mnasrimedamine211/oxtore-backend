@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Patch,
+  Delete,
+  Body,
   Param,
   Query,
   UseGuards,
@@ -10,9 +12,12 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { QueryAdminBoutiquesDto } from './dto/query-admin-boutiques.dto';
 import { QueryAdminUsersDto } from './dto/query-admin-users.dto';
+import { RejectBoutiqueDto } from './dto/reject-boutique.dto';
+import { UpdateBoutiqueDto } from '../boutiques/dto/update-boutique.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -42,14 +47,36 @@ export class AdminController {
 
   @Patch('boutiques/:id/approve')
   @ApiOperation({ summary: 'Approve a boutique (admin only)' })
-  approveBoutique(@Param('id') id: string) {
-    return this.adminService.approveBoutique(id);
+  approveBoutique(@CurrentUser() admin: JwtPayload, @Param('id') id: string) {
+    return this.adminService.approveBoutique(id, admin.sub);
+  }
+
+  @Patch('boutiques/:id/reject')
+  @ApiOperation({ summary: 'Reject a boutique with a reason (admin only)' })
+  rejectBoutique(
+    @CurrentUser() admin: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: RejectBoutiqueDto,
+  ) {
+    return this.adminService.rejectBoutique(id, admin.sub, dto.reason);
   }
 
   @Patch('boutiques/:id/suspend')
   @ApiOperation({ summary: 'Suspend a boutique (admin only)' })
   suspendBoutique(@Param('id') id: string) {
     return this.adminService.suspendBoutique(id);
+  }
+
+  @Patch('boutiques/:id')
+  @ApiOperation({ summary: 'Edit any boutique (admin only)' })
+  updateBoutique(@Param('id') id: string, @Body() dto: UpdateBoutiqueDto) {
+    return this.adminService.updateBoutique(id, dto);
+  }
+
+  @Delete('boutiques/:id')
+  @ApiOperation({ summary: 'Delete any boutique (admin only)' })
+  deleteBoutique(@Param('id') id: string) {
+    return this.adminService.deleteBoutique(id);
   }
 
   @Get('users')

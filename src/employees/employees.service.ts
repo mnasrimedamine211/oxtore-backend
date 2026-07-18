@@ -1,20 +1,25 @@
 import {
   Injectable,
   NotFoundException,
-  ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { BoutiqueAccessService } from '../common/services/boutique-access.service';
+import { BoutiqueNotifyService } from '../common/services/boutique-notify.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class EmployeesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private boutiqueAccess: BoutiqueAccessService,
+    private boutiqueNotify: BoutiqueNotifyService,
+  ) {}
 
   async create(userId: string, boutiqueId: string, dto: CreateEmployeeDto) {
-    await this.checkBoutiqueAccess(userId, boutiqueId);
+    await this.boutiqueAccess.assertAccess(userId, boutiqueId);
 
     const existing = await this.prisma.employee.findFirst({
       where: { email: dto.email, boutiqueId, deletedAt: null },
@@ -35,13 +40,13 @@ export class EmployeesService {
     });
 
     // Notify boutique managers/owners
-    await this.notifyBoutiqueManagers(boutiqueId, 'employee', 'New Employee Added', `${dto.fullName} has been added`);
+    await this.boutiqueNotify.notifyManagers(boutiqueId, 'employee', 'New Employee Added', `${dto.fullName} has been added`);
 
     return this.formatEmployee(employee);
   }
 
   async findAll(userId: string, boutiqueId: string, query: PaginationDto) {
-    await this.checkBoutiqueAccess(userId, boutiqueId);
+    await this.boutiqueAccess.assertAccess(userId, boutiqueId);
 
     const page = query.page || 1;
     const limit = query.limit || 20;
@@ -88,7 +93,7 @@ export class EmployeesService {
       include: { boutique: true, _count: { select: { sales: true } } },
     });
     if (!employee) throw new NotFoundException('Employee not found');
-    await this.checkBoutiqueAccess(userId, employee.boutiqueId);
+    await this.boutiqueAccess.assertAccess(userId, employee.boutiqueId);
     return this.formatEmployee(employee);
   }
 
@@ -97,7 +102,7 @@ export class EmployeesService {
       where: { id, deletedAt: null },
     });
     if (!employee) throw new NotFoundException('Employee not found');
-    await this.checkBoutiqueAccess(userId, employee.boutiqueId);
+    await this.boutiqueAccess.assertAccess(userId, employee.boutiqueId);
 
     const updated = await this.prisma.employee.update({
       where: { id },
@@ -118,7 +123,7 @@ export class EmployeesService {
       where: { id, deletedAt: null },
     });
     if (!employee) throw new NotFoundException('Employee not found');
-    await this.checkBoutiqueAccess(userId, employee.boutiqueId);
+    await this.boutiqueAccess.assertAccess(userId, employee.boutiqueId);
 
     await this.prisma.employee.update({
       where: { id },
@@ -151,41 +156,4 @@ export class EmployeesService {
     };
   }
 
-  private async checkBoutiqueAccess(userId: string, boutiqueId: string) {
-    const boutique = await this.prisma.boutique.findFirst({
-      where: {
-        id: boutiqueId,
-        deletedAt: null,
-        OR: [
-          { managerId: userId },
-          { owners: { some: { userId } } },
-        ],
-      },
-    });
-    if (!boutique) throw new ForbiddenException('Access denied to this boutique');
-  }
-
-  private async notifyBoutiqueManagers(boutiqueId: string, type: string, title: string, message: string) {
-    const boutique = await this.prisma.boutique.findUnique({
-      where: { id: boutiqueId },
-      include: { owners: true },
-    });
-    if (!boutique) return;
-
-    const userIds = new Set<string>();
-    if (boutique.managerId) userIds.add(boutique.managerId);
-    boutique.owners.forEach((o) => userIds.add(o.userId));
-
-    for (const uid of userIds) {
-      await this.prisma.notification.create({
-        data: {
-          userId: uid,
-          type: type as any,
-          title,
-          message,
-          data: { boutiqueId },
-        },
-      });
-    }
-  }
 }

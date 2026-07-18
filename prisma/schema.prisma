@@ -27,6 +27,7 @@ enum BoutiqueStatus {
   active
   pending
   suspended
+  rejected
 }
 
 enum EmployeeStatus {
@@ -231,6 +232,9 @@ model Boutique {
   language    String         @default("en")
   currency    String         @default("USD")
   categories  String[]       @default([])
+  rejectionReason String?    @map("rejection_reason")
+  respondedAt     DateTime?  @map("responded_at")
+  respondedBy     String?    @map("responded_by") @db.Uuid
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @updatedAt @map("updated_at")
   deletedAt   DateTime?      @map("deleted_at")
