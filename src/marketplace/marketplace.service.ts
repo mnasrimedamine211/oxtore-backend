@@ -94,6 +94,7 @@ export class MarketplaceService {
       name: product.name,
       price: product.price,
       image: product.images?.[0] ?? null,
+      images: product.images ?? [],
       category: product.category,
       condition: product.condition?.toUpperCase(),
       saleType,

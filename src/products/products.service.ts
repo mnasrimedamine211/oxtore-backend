@@ -30,6 +30,9 @@ export class ProductsService {
       throw new ForbiddenException('Boutique must be approved before publishing products');
     }
 
+    const initialStock = dto.stock ?? 0;
+    const stockStatus = this.computeStockStatus(initialStock, 0, 0);
+
     const product = await this.prisma.product.create({
       data: {
         name: dto.name,
@@ -63,6 +66,29 @@ export class ProductsService {
             value: commission.value,
           })),
         },
+        stockItems: {
+          create: [
+            {
+              boutiqueId,
+              quantity: initialStock,
+              available: initialStock,
+              status: stockStatus as any,
+            },
+          ],
+        },
+        ...(initialStock > 0 && {
+          inventoryMovements: {
+            create: [
+              {
+                boutiqueId,
+                type: 'in',
+                reason: 'initial',
+                quantity: initialStock,
+                createdBy: userId,
+              },
+            ],
+          },
+        }),
       },
       include: PRODUCT_INCLUDE,
     });

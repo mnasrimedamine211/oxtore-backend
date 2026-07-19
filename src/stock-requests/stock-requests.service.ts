@@ -37,6 +37,18 @@ export class StockRequestsService {
       throw new BadRequestException('Boutiques must be in the same network');
     }
 
+    // Private products are never sourceable by another boutique, partner or not.
+    const product = await this.prisma.product.findFirst({
+      where: { id: dto.productId, deletedAt: null },
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    if (product.ownerBoutiqueId !== dto.receiverId) {
+      throw new BadRequestException('Product does not belong to the receiver boutique');
+    }
+    if (!product.isPublic) {
+      throw new ForbiddenException('This product is private and cannot be requested by other boutiques');
+    }
+
     const request = await this.prisma.stockRequest.create({
       data: {
         productId: dto.productId,

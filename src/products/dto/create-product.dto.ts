@@ -100,6 +100,12 @@ export class CreateProductDto {
   @Min(0)
   commission?: number;
 
+  @ApiPropertyOptional({ default: 0, description: 'Initial stock quantity to create for this boutique' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  stock?: number;
+
   @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
