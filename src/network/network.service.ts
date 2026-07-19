@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { NotificationsGateway } from '../common/gateways/notifications.gateway';
 import { CreateBoutiqueRequestDto } from './dto/create-boutique-request.dto';
 import { AcceptBoutiqueRequestDto } from './dto/accept-boutique-request.dto';
 import { RejectBoutiqueRequestDto } from './dto/reject-boutique-request.dto';
@@ -20,7 +21,10 @@ import {
 
 @Injectable()
 export class NetworkService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsGateway: NotificationsGateway,
+  ) {}
 
   async createRequest(userId: string, dto: CreateBoutiqueRequestDto) {
     const requesterId = dto.fromBoutiqueId;
@@ -77,7 +81,7 @@ export class NetworkService {
       where: { id: receiverId },
     });
     if (receiver?.managerId) {
-      await this.prisma.notification.create({
+      const notification = await this.prisma.notification.create({
         data: {
           userId: receiver.managerId,
           type: 'boutique_request',
@@ -86,6 +90,7 @@ export class NetworkService {
           data: { boutiqueRequestId: request.id },
         },
       });
+      this.notificationsGateway.emitToUser(receiver.managerId, notification);
     }
 
     return this.formatRequest(request);
@@ -216,8 +221,9 @@ export class NetworkService {
       const requester = await tx.boutique.findUnique({
         where: { id: request.requesterId },
       });
+      let notification = null;
       if (requester?.managerId) {
-        await tx.notification.create({
+        notification = await tx.notification.create({
           data: {
             userId: requester.managerId,
             type: 'boutique_request',
@@ -228,10 +234,14 @@ export class NetworkService {
         });
       }
 
-      return updatedRequest;
+      return { updatedRequest, notification };
     });
 
-    return this.formatRequest(updated);
+    if (updated.notification) {
+      this.notificationsGateway.emitToUser(updated.notification.userId, updated.notification);
+    }
+
+    return this.formatRequest(updated.updatedRequest);
   }
 
   async rejectRequest(userId: string, requestId: string, dto: RejectBoutiqueRequestDto) {
@@ -264,8 +274,9 @@ export class NetworkService {
       const requester = await tx.boutique.findUnique({
         where: { id: request.requesterId },
       });
+      let notification = null;
       if (requester?.managerId) {
-        await tx.notification.create({
+        notification = await tx.notification.create({
           data: {
             userId: requester.managerId,
             type: 'boutique_request',
@@ -276,10 +287,14 @@ export class NetworkService {
         });
       }
 
-      return updatedRequest;
+      return { updatedRequest, notification };
     });
 
-    return this.formatRequest(updated);
+    if (updated.notification) {
+      this.notificationsGateway.emitToUser(updated.notification.userId, updated.notification);
+    }
+
+    return this.formatRequest(updated.updatedRequest);
   }
 
   async findAllRelations(userId: string, query: QueryBoutiqueRelationDto) {

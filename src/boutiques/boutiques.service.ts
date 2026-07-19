@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { BoutiqueAccessService } from '../common/services/boutique-access.service';
+import { BoutiqueNotifyService } from '../common/services/boutique-notify.service';
 import { CreateBoutiqueDto } from './dto/create-boutique.dto';
 import { UpdateBoutiqueDto } from './dto/update-boutique.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -13,9 +14,15 @@ export class BoutiquesService {
   constructor(
     private prisma: PrismaService,
     private boutiqueAccess: BoutiqueAccessService,
+    private boutiqueNotify: BoutiqueNotifyService,
   ) {}
 
   async create(userId: string, dto: CreateBoutiqueDto) {
+    const owner = await this.prisma.profile.findUnique({ where: { id: userId } });
+
+    // Admins aren't subject to the approval workflow — their boutiques go live immediately.
+    const isAdmin = owner?.role === 'ADMIN';
+
     const boutique = await this.prisma.boutique.create({
       data: {
         name: dto.name,
@@ -24,7 +31,7 @@ export class BoutiquesService {
         phone: dto.phone,
         description: dto.description || '',
         managerId: userId,
-        status: 'pending',
+        status: isAdmin ? 'active' : 'pending',
         language: dto.language || 'en',
         currency: dto.currency || 'USD',
         categories: dto.categories || [],
@@ -34,6 +41,22 @@ export class BoutiquesService {
     await this.prisma.boutiqueOwner.create({
       data: { boutiqueId: boutique.id, userId },
     });
+
+    if (owner?.role === 'USER') {
+      await this.prisma.profile.update({
+        where: { id: userId },
+        data: { role: 'MANAGER' },
+      });
+    }
+
+    if (!isAdmin) {
+      await this.boutiqueNotify.notifyAdmins(
+        boutique.id,
+        'boutique_request',
+        'New boutique pending approval',
+        `${boutique.name} was submitted by ${owner?.fullName ?? 'a user'} and awaits your approval.`,
+      );
+    }
 
     return this.getFormattedBoutique(boutique.id);
   }

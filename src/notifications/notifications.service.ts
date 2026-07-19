@@ -10,7 +10,8 @@ export type ContractNotificationType =
   | 'hr'
   | 'system'
   | 'network'
-  | 'stock_request';
+  | 'stock_request'
+  | 'boutique_request';
 
 export interface NotificationResponse {
   id: string;
@@ -27,7 +28,7 @@ export interface NotificationResponse {
 const TYPE_MAP: Record<NotificationType, ContractNotificationType> = {
   sale: 'sale',
   stock_request: 'stock_request',
-  boutique_request: 'network',
+  boutique_request: 'boutique_request',
   system: 'system',
   order: 'system',
   wallet: 'system',

@@ -14,14 +14,27 @@ export class OtpService implements OtpProvider {
   private twilioClient: Twilio | null = null;
 
   constructor(private configService: ConfigService) {
-    this.initEmailProvider();
+    void this.initEmailProvider();
     this.initWhatsAppProvider();
   }
 
-  private initEmailProvider() {
+  private async initEmailProvider(): Promise<void> {
     const provider = this.configService.get<string>('mail.provider');
     try {
-      if (provider === 'gmail') {
+      if (provider === 'ethereal') {
+        // Zero-setup free test inbox — auto-provisioned via Nodemailer's API, no signup needed.
+        // Mail sent through it isn't delivered to a real inbox; each send logs a preview URL instead.
+        const testAccount = await nodemailer.createTestAccount();
+        this.emailTransporter = nodemailer.createTransport({
+          host: testAccount.smtp.host,
+          port: testAccount.smtp.port,
+          secure: testAccount.smtp.secure,
+          auth: { user: testAccount.user, pass: testAccount.pass },
+        });
+        this.logger.log(
+          `Email provider: Ethereal test inbox initialized (dev-only, not real delivery). Inbox: https://ethereal.email/login user=${testAccount.user} pass=${testAccount.pass}`,
+        );
+      } else if (provider === 'gmail') {
         const email = this.configService.get<string>('mail.gmailEmail');
         const password = this.configService.get<string>('mail.gmailAppPassword');
         if (email && password) {
@@ -90,26 +103,42 @@ export class OtpService implements OtpProvider {
     }
 
     try {
-      await this.emailTransporter.sendMail({
+      const info = await this.emailTransporter.sendMail({
         from: `"${fromName}" <${fromEmail}>`,
         to: email,
-        subject: 'Oxtore - Your Verification Code',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
-            <h2 style="color: #2563eb;">Oxtore Verification Code</h2>
-            <p>Your verification code is:</p>
-            <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1e40af; padding: 20px; background: #eff6ff; border-radius: 8px; text-align: center;">
-              ${code}
-            </div>
-            <p style="color: #6b7280; font-size: 14px;">This code expires in 10 minutes. If you didn't request this, please ignore this email.</p>
-          </div>
-        `,
+        subject: 'Your Oxtore verification code',
+        html: this.buildOtpEmailHtml(code),
       });
+
+      const previewUrl = nodemailer.getTestMessageUrl(info);
+      if (previewUrl) {
+        this.logger.log(`OTP email queued for ${email} — preview: ${previewUrl}`);
+      }
       return true;
     } catch (err) {
       this.logger.error(`Failed to send email OTP to ${email}: ${err.message}`);
       return false;
     }
+  }
+
+  private buildOtpEmailHtml(code: string): string {
+    return `
+      <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #f8fafc;">
+        <div style="background: #1d4ed8; padding: 28px 24px; text-align: center; border-radius: 12px 12px 0 0;">
+          <span style="display: inline-block; font-size: 24px; font-weight: 900; letter-spacing: 3px; color: #ffffff;">
+            OX<span style="color: #6ee7b7;">TORE</span>
+          </span>
+        </div>
+        <div style="background: #ffffff; padding: 32px 24px; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb; border-top: none;">
+          <h2 style="color: #111827; font-size: 18px; margin: 0 0 8px;">Verify your email</h2>
+          <p style="color: #4b5563; font-size: 14px; margin: 0 0 20px;">Enter this code to finish creating your Oxtore account:</p>
+          <div style="font-size: 32px; font-weight: 800; letter-spacing: 10px; color: #1d4ed8; padding: 18px; background: #eff6ff; border-radius: 10px; text-align: center;">
+            ${code}
+          </div>
+          <p style="color: #9ca3af; font-size: 12px; margin: 20px 0 0;">This code expires in 10 minutes. If you didn't request it, you can safely ignore this email.</p>
+        </div>
+      </div>
+    `;
   }
 
   private async sendWhatsAppOtp(phone: string, code: string): Promise<boolean> {
@@ -133,6 +162,8 @@ export class OtpService implements OtpProvider {
   }
 
   generateOtpCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    this.logger.log(`Generated OTP code: ${code}`);
+    return code;
   }
 }

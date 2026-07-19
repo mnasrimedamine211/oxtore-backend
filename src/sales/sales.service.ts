@@ -5,12 +5,16 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { NotificationsGateway } from '../common/gateways/notifications.gateway';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class SalesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsGateway: NotificationsGateway,
+  ) {}
 
   async create(userId: string, dto: CreateSaleDto) {
     await this.checkBoutiqueAccess(userId, dto.boutiqueId);
@@ -87,8 +91,9 @@ export class SalesService {
       const boutique = await tx.boutique.findUnique({
         where: { id: dto.boutiqueId },
       });
+      let notification = null;
       if (boutique?.managerId) {
-        await tx.notification.create({
+        notification = await tx.notification.create({
           data: {
             userId: boutique.managerId,
             type: 'sale',
@@ -99,10 +104,14 @@ export class SalesService {
         });
       }
 
-      return createdSale;
+      return { createdSale, notification };
     });
 
-    return this.formatSale(sale);
+    if (sale.notification) {
+      this.notificationsGateway.emitToUser(sale.notification.userId, sale.notification);
+    }
+
+    return this.formatSale(sale.createdSale);
   }
 
   async findAll(userId: string, boutiqueId: string, query: PaginationDto) {

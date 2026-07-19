@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { NotificationsGateway } from '../common/gateways/notifications.gateway';
 import { CreateStockRequestDto } from './dto/create-stock-request.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import {
@@ -14,7 +15,10 @@ import {
 
 @Injectable()
 export class StockRequestsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsGateway: NotificationsGateway,
+  ) {}
 
   async create(userId: string, dto: CreateStockRequestDto) {
     await this.checkBoutiqueAccess(userId, dto.requesterId);
@@ -51,7 +55,7 @@ export class StockRequestsService {
       where: { id: dto.receiverId },
     });
     if (receiver?.managerId) {
-      await this.prisma.notification.create({
+      const notification = await this.prisma.notification.create({
         data: {
           userId: receiver.managerId,
           type: 'stock_request',
@@ -60,6 +64,7 @@ export class StockRequestsService {
           data: { stockRequestId: request.id },
         },
       });
+      this.notificationsGateway.emitToUser(receiver.managerId, notification);
     }
 
     return this.formatStockRequest(request);
@@ -193,8 +198,9 @@ export class StockRequestsService {
       const requester = await tx.boutique.findUnique({
         where: { id: request.requesterId },
       });
+      let notification = null;
       if (requester?.managerId) {
-        await tx.notification.create({
+        notification = await tx.notification.create({
           data: {
             userId: requester.managerId,
             type: 'stock_request',
@@ -205,10 +211,14 @@ export class StockRequestsService {
         });
       }
 
-      return updated;
+      return { updated, notification };
     });
 
-    return this.formatStockRequest(updated);
+    if (updated.notification) {
+      this.notificationsGateway.emitToUser(updated.notification.userId, updated.notification);
+    }
+
+    return this.formatStockRequest(updated.updated);
   }
 
   async reject(userId: string, id: string, rejectionReason?: string) {
@@ -233,8 +243,9 @@ export class StockRequestsService {
       const requester = await tx.boutique.findUnique({
         where: { id: request.requesterId },
       });
+      let notification = null;
       if (requester?.managerId) {
-        await tx.notification.create({
+        notification = await tx.notification.create({
           data: {
             userId: requester.managerId,
             type: 'stock_request',
@@ -245,10 +256,14 @@ export class StockRequestsService {
         });
       }
 
-      return updated;
+      return { updated, notification };
     });
 
-    return this.formatStockRequest(updated);
+    if (updated.notification) {
+      this.notificationsGateway.emitToUser(updated.notification.userId, updated.notification);
+    }
+
+    return this.formatStockRequest(updated.updated);
   }
 
   async fulfill(userId: string, id: string) {
@@ -334,8 +349,9 @@ export class StockRequestsService {
       const requester = await tx.boutique.findUnique({
         where: { id: request.requesterId },
       });
+      let notification = null;
       if (requester?.managerId) {
-        await tx.notification.create({
+        notification = await tx.notification.create({
           data: {
             userId: requester.managerId,
             type: 'stock_request',
@@ -346,10 +362,14 @@ export class StockRequestsService {
         });
       }
 
-      return updated;
+      return { updated, notification };
     });
 
-    return this.formatStockRequest(updated);
+    if (updated.notification) {
+      this.notificationsGateway.emitToUser(updated.notification.userId, updated.notification);
+    }
+
+    return this.formatStockRequest(updated.updated);
   }
 
   async cancel(userId: string, id: string) {

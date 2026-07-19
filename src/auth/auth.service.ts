@@ -16,6 +16,7 @@ import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { SendOtpDto } from './dto/send-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
@@ -65,11 +66,8 @@ export class AuthService {
       data: { metadata: { hashedPassword } as any },
     });
 
-    // Generate and send OTP
-    const code = this.otpService.generateOtpCode();
-    await this.storeOtp(profile.id, code, 'email');
-    await this.otpService.sendOtp(dto.email, code, 'email');
-
+    // OTP is no longer auto-sent here — the frontend shows a delivery-method picker
+    // (email/WhatsApp) after signup, which explicitly calls sendOtp() below.
     const tokens = await this.generateTokens(profile);
 
     return {
@@ -151,6 +149,27 @@ export class AuthService {
     }
 
     return { message: 'If the email exists, a reset code has been sent' };
+  }
+
+  /** Sends (or resends) the signup verification code via the caller's chosen channel. */
+  async sendOtp(dto: SendOtpDto) {
+    const profile = await this.prisma.profile.findUnique({
+      where: { email: dto.email },
+    });
+    if (!profile) {
+      throw new NotFoundException('User not found');
+    }
+    if (dto.method === 'whatsapp' && !profile.phone) {
+      throw new BadRequestException('No phone number on file for WhatsApp delivery');
+    }
+
+    const code = this.otpService.generateOtpCode();
+    await this.storeOtp(profile.id, code, 'email');
+
+    const to = dto.method === 'whatsapp' ? profile.phone! : profile.email;
+    await this.otpService.sendOtp(to, code, dto.method);
+
+    return { expiresIn: 600 };
   }
 
   async verifyOtp(dto: VerifyOtpDto) {

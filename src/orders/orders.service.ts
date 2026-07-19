@@ -3,15 +3,19 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Order } from '@prisma/client';
+import { Order, Notification } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { NotificationsGateway } from '../common/gateways/notifications.gateway';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderResponseDto } from './dto/order-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsGateway: NotificationsGateway,
+  ) {}
 
   async create(userId: string, dto: CreateOrderDto) {
     // Validate stock for all items
@@ -34,6 +38,8 @@ export class OrdersService {
     const tax = dto.tax || 0;
     const shipping = dto.shipping || 0;
     const total = subtotal - discount + tax + shipping;
+
+    const notifications: Notification[] = [];
 
     const created = await this.prisma.$transaction(async (tx) => {
       // 1. Create the order — confirmed immediately, no payment gateway/wallet check involved.
@@ -87,7 +93,7 @@ export class OrdersService {
       for (const boutiqueId of boutiqueIds) {
         const boutique = await tx.boutique.findUnique({ where: { id: boutiqueId } });
         if (boutique?.managerId) {
-          await tx.notification.create({
+          const notification = await tx.notification.create({
             data: {
               userId: boutique.managerId,
               type: 'order',
@@ -96,11 +102,14 @@ export class OrdersService {
               data: { orderId: order.id, total },
             },
           });
+          notifications.push(notification);
         }
       }
 
       return order;
     });
+
+    notifications.forEach((n) => this.notificationsGateway.emitToUser(n.userId, n));
 
     return this.toOrderResponse(created);
   }

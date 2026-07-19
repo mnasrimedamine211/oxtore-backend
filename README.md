@@ -46,7 +46,7 @@ npx prisma generate
 # 6. Run database migrations
 npx prisma migrate dev
 
-# 7. Run seed
+# 7. Run seed to show models
 npm run seed
 
 # 8. Start the backend
