@@ -145,6 +145,41 @@ export class OrdersService {
     };
   }
 
+  /** Platform-wide order listing for admins — same shape as findAll() but not scoped to a single user. */
+  async findAllAdmin(query: PaginationDto & { status?: string }) {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = { deletedAt: null };
+    if (query.status) where.status = query.status;
+
+    const [orders, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: { user: { select: { fullName: true, email: true } } },
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return {
+      data: await Promise.all(
+        orders.map((order) => this.toOrderResponse(order, order.user)),
+      ),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      },
+    };
+  }
+
   async findOne(userId: string, id: string) {
     const order = await this.prisma.order.findFirst({
       where: { id, userId, deletedAt: null },
@@ -214,7 +249,10 @@ export class OrdersService {
    *    stored directly on each item). Order does not track a currency at all today; if the
    *    boutique lookup fails for any reason we fall back to 'USD'.
    */
-  private async toOrderResponse(order: Order): Promise<OrderResponseDto> {
+  private async toOrderResponse(
+    order: Order,
+    buyer?: { fullName: string; email: string },
+  ): Promise<OrderResponseDto> {
     const items = Array.isArray(order.items) ? (order.items as any[]) : [];
     const firstItem = items[0];
 
@@ -262,6 +300,8 @@ export class OrdersService {
       status: order.status,
       createdAt: order.createdAt,
       seller,
+      buyerName: buyer?.fullName ?? null,
+      buyerEmail: buyer?.email ?? null,
     };
   }
 }

@@ -18,6 +18,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
+import { OrdersService } from '../orders/orders.service';
+import { QueryOrdersDto } from '../orders/dto/query-orders.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -25,7 +27,10 @@ import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decor
 @Roles('ADMIN')
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly ordersService: OrdersService,
+  ) {}
 
   @Get('stats')
   @ApiOperation({ summary: 'Get platform-wide statistics (admin only)' })
@@ -83,5 +88,11 @@ export class AdminController {
   @ApiOperation({ summary: 'List all users (admin only)' })
   getUsers(@Query() query: QueryAdminUsersDto) {
     return this.adminService.getUsers(query);
+  }
+
+  @Get('orders')
+  @ApiOperation({ summary: 'List all orders across the platform (admin only)' })
+  getOrders(@Query() query: QueryOrdersDto) {
+    return this.ordersService.findAllAdmin(query);
   }
 }

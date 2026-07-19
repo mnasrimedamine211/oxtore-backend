@@ -35,4 +35,10 @@ export class OrderResponseDto {
 
   @ApiPropertyOptional({ nullable: true, description: "Boutique name for the first item's boutique" })
   seller: string | null;
+
+  @ApiPropertyOptional({ nullable: true, description: 'Buyer full name — only populated on admin-wide listings' })
+  buyerName?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, description: 'Buyer email — only populated on admin-wide listings' })
+  buyerEmail?: string | null;
 }

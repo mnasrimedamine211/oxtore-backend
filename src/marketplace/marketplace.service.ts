@@ -7,6 +7,7 @@ export class MarketplaceService {
   constructor(private prisma: PrismaService) {}
 
   async getProducts(
+    userId: string,
     query: PaginationDto & {
       category?: string;
       minPrice?: number;
@@ -20,11 +21,25 @@ export class MarketplaceService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
+    // Boutiques the caller owns or manages also get their own private products
+    // surfaced here, so an owner sees their private catalog alongside the public one.
+    const myBoutiques = await this.prisma.boutique.findMany({
+      where: {
+        deletedAt: null,
+        OR: [{ managerId: userId }, { owners: { some: { userId } } }],
+      },
+      select: { id: true },
+    });
+    const myBoutiqueIds = myBoutiques.map((b) => b.id);
+
     const where: any = {
       deletedAt: null,
       isActive: true,
-      visibility: 'public',
       ownerBoutique: { status: 'active' },
+      OR: [
+        { visibility: 'public' },
+        ...(myBoutiqueIds.length ? [{ ownerBoutiqueId: { in: myBoutiqueIds } }] : []),
+      ],
     };
 
     if (query.category) where.category = query.category;

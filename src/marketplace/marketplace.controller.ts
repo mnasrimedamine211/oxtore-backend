@@ -4,6 +4,7 @@ import { MarketplaceService } from './marketplace.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { QueryMarketplaceProductsDto } from './dto/query-marketplace-products.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Marketplace')
 @ApiBearerAuth()
@@ -13,14 +14,14 @@ export class MarketplaceController {
   constructor(private readonly marketplaceService: MarketplaceService) {}
 
   @Get('products')
-  @ApiOperation({ summary: 'Browse marketplace products (all active products from all boutiques)' })
-  getProducts(@Query() query: QueryMarketplaceProductsDto) {
+  @ApiOperation({ summary: 'Browse marketplace products (all active public products, plus private products of boutiques the caller owns or manages)' })
+  getProducts(@CurrentUser() user: JwtPayload, @Query() query: QueryMarketplaceProductsDto) {
     const parsed = {
       ...query,
       minPrice: query.minPrice ? parseFloat(query.minPrice) : undefined,
       maxPrice: query.maxPrice ? parseFloat(query.maxPrice) : undefined,
     };
-    return this.marketplaceService.getProducts(parsed);
+    return this.marketplaceService.getProducts(user.sub, parsed);
   }
 
   @Get('categories')
