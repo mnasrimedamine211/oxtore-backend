@@ -1,5 +1,7 @@
 // Oxtore Prisma Schema
-// Runs against a local PostgreSQL database; migrations are managed via Prisma Migrate.
+// Runs against Neon PostgreSQL in production/delivery (local Postgres in dev);
+// migrations are managed via Prisma Migrate. DATABASE_URL controls the target — see
+// the root .env (Neon, used by the Prisma CLI by default) and .env.development (local).
 // Field naming follows the API Contract canonical models (§2).
 
 generator client {
