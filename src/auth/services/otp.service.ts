@@ -11,6 +11,7 @@ export interface OtpProvider {
 export class OtpService implements OtpProvider {
   private readonly logger = new Logger(OtpService.name);
   private emailTransporter: nodemailer.Transporter | null = null;
+  private resendApiKey: string | null = null;
   private twilioClient: Twilio | null = null;
 
   constructor(private configService: ConfigService) {
@@ -59,6 +60,16 @@ export class OtpService implements OtpProvider {
           });
           this.logger.log('Email provider: Mailtrap initialized');
         }
+      } else if (provider === 'resend') {
+        // Sends over HTTPS via Resend's REST API rather than raw SMTP — needed on hosts
+        // (e.g. Railway) that block outbound SMTP connections entirely.
+        const apiKey = this.configService.get<string>('mail.resendApiKey');
+        if (apiKey) {
+          this.resendApiKey = apiKey;
+          this.logger.log('Email provider: Resend API initialized');
+        } else {
+          this.logger.warn('Resend API key not configured; OTP emails will be logged only');
+        }
       }
     } catch (err) {
       this.logger.error(`Failed to initialize email provider: ${err.message}`);
@@ -94,6 +105,10 @@ export class OtpService implements OtpProvider {
   }
 
   private async sendEmailOtp(email: string, code: string): Promise<boolean> {
+    if (this.resendApiKey) {
+      return this.sendEmailOtpViaResend(email, code);
+    }
+
     const fromEmail = this.configService.get<string>('mail.fromEmail');
     const fromName = this.configService.get<string>('mail.fromName');
 
@@ -117,6 +132,35 @@ export class OtpService implements OtpProvider {
       return true;
     } catch (err) {
       this.logger.error(`Failed to send email OTP to ${email}: ${err.message}`);
+      return false;
+    }
+  }
+
+  private async sendEmailOtpViaResend(email: string, code: string): Promise<boolean> {
+    const fromEmail = this.configService.get<string>('mail.resendFromEmail');
+    const fromName = this.configService.get<string>('mail.fromName');
+
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [email],
+          subject: 'Your Oxtore verification code',
+          html: this.buildOtpEmailHtml(code),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Resend API responded ${response.status}: ${await response.text()}`);
+      }
+      return true;
+    } catch (err) {
+      this.logger.error(`Failed to send email OTP to ${email} via Resend: ${err.message}`);
       return false;
     }
   }

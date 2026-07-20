@@ -10,6 +10,11 @@ export default registerAs('mail', () => ({
   mailtrapPort: parseInt(process.env.MAILTRAP_PORT || '587', 10),
   mailtrapUser: process.env.MAILTRAP_USER || '',
   mailtrapPass: process.env.MAILTRAP_PASS || '',
+  // Resend sends over HTTPS (not SMTP), so it works on hosts that block outbound SMTP (e.g. Railway).
+  // 'onboarding@resend.dev' is Resend's shared sender for unverified accounts — works with any
+  // recipient with zero setup; switch to a verified domain's address once you have one.
+  resendApiKey: process.env.RESEND_API_KEY || '',
+  resendFromEmail: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
   fromEmail: process.env.MAIL_FROM_EMAIL || 'noreply@oxtore.com',
   fromName: process.env.MAIL_FROM_NAME || 'Oxtore',
 }));
