@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
+  ForbiddenException,
   NotFoundException,
   BadRequestException,
   Logger,
@@ -66,12 +67,10 @@ export class AuthService {
       data: { metadata: { hashedPassword } as any },
     });
 
-    // OTP is no longer auto-sent here — the frontend shows a delivery-method picker
-    // (email/WhatsApp) after signup, which explicitly calls sendOtp() below.
-    const tokens = await this.generateTokens(profile);
-
+    // No tokens here — the account isn't usable until verify-otp succeeds (enforced in
+    // login() too, below). The frontend shows a delivery-method picker (email/WhatsApp)
+    // after signup, which explicitly calls sendOtp(), then verify-otp() issues the tokens.
     return {
-      ...tokens,
       user: await this.formatUser(profile),
     };
   }
@@ -94,6 +93,15 @@ export class AuthService {
     const valid = await argon2.verify(storedHash, dto.password);
     if (!valid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Checked after the password so a wrong-password attempt can't be used to probe
+    // whether an email is registered-but-unverified.
+    if (!profile.isVerified) {
+      throw new ForbiddenException({
+        code: 'ACCOUNT_NOT_VERIFIED',
+        message: 'Please verify your email before logging in',
+      });
     }
 
     const tokens = await this.generateTokens(profile);
@@ -185,12 +193,18 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired OTP code');
     }
 
-    await this.prisma.profile.update({
+    const updated = await this.prisma.profile.update({
       where: { id: profile.id },
       data: { isVerified: true },
     });
 
-    return { message: 'Email verified successfully' };
+    // This is the first point the account is actually usable — signup and login both
+    // withhold tokens for unverified accounts, so issue the real session here.
+    const tokens = await this.generateTokens(updated);
+    return {
+      ...tokens,
+      user: await this.formatUser(updated),
+    };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
