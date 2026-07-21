@@ -12,6 +12,7 @@ export class OtpService implements OtpProvider {
   private readonly logger = new Logger(OtpService.name);
   private emailTransporter: nodemailer.Transporter | null = null;
   private resendApiKey: string | null = null;
+  private sendgridApiKey: string | null = null;
   private twilioClient: Twilio | null = null;
 
   constructor(private configService: ConfigService) {
@@ -70,6 +71,16 @@ export class OtpService implements OtpProvider {
         } else {
           this.logger.warn('Resend API key not configured; OTP emails will be logged only');
         }
+      } else if (provider === 'sendgrid') {
+        // Also HTTPS-based. Unlike Resend, SendGrid's Single Sender Verification allows sending
+        // to any recipient from a verified plain email address, with no owned domain required.
+        const apiKey = this.configService.get<string>('mail.sendgridApiKey');
+        if (apiKey) {
+          this.sendgridApiKey = apiKey;
+          this.logger.log('Email provider: SendGrid API initialized');
+        } else {
+          this.logger.warn('SendGrid API key not configured; OTP emails will be logged only');
+        }
       }
     } catch (err) {
       this.logger.error(`Failed to initialize email provider: ${err.message}`);
@@ -107,6 +118,9 @@ export class OtpService implements OtpProvider {
   private async sendEmailOtp(email: string, code: string): Promise<boolean> {
     if (this.resendApiKey) {
       return this.sendEmailOtpViaResend(email, code);
+    }
+    if (this.sendgridApiKey) {
+      return this.sendEmailOtpViaSendgrid(email, code);
     }
 
     const fromEmail = this.configService.get<string>('mail.fromEmail');
@@ -161,6 +175,35 @@ export class OtpService implements OtpProvider {
       return true;
     } catch (err) {
       this.logger.error(`Failed to send email OTP to ${email} via Resend: ${err.message}`);
+      return false;
+    }
+  }
+
+  private async sendEmailOtpViaSendgrid(email: string, code: string): Promise<boolean> {
+    const fromEmail = this.configService.get<string>('mail.sendgridFromEmail');
+    const fromName = this.configService.get<string>('mail.fromName');
+
+    try {
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.sendgridApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email }] }],
+          from: { email: fromEmail, name: fromName },
+          subject: 'Your Oxtore verification code',
+          content: [{ type: 'text/html', value: this.buildOtpEmailHtml(code) }],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`SendGrid API responded ${response.status}: ${await response.text()}`);
+      }
+      return true;
+    } catch (err) {
+      this.logger.error(`Failed to send email OTP to ${email} via SendGrid: ${err.message}`);
       return false;
     }
   }
