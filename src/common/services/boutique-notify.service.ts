@@ -10,13 +10,20 @@ export class BoutiqueNotifyService {
     private notificationsGateway: NotificationsGateway,
   ) {}
 
-  /** Notifies a boutique's manager + all owners with the same message. */
+  /**
+   * Notifies a boutique's manager + all owners with the same message.
+   * `socketEvent`, when given, is emitted as its own named event (with `data` as the
+   * payload) alongside the notification — lets the app react to a specific state change
+   * (e.g. boutique status flipping to active) immediately, instead of only surfacing a
+   * generic toast that the UI has no wiring to act on.
+   */
   async notifyManagers(
     boutiqueId: string,
     type: NotificationType,
     title: string,
     message: string,
     data: Record<string, unknown> = {},
+    socketEvent?: string,
   ): Promise<void> {
     const boutique = await this.prisma.boutique.findUnique({
       where: { id: boutiqueId },
@@ -28,7 +35,7 @@ export class BoutiqueNotifyService {
     if (boutique.managerId) userIds.add(boutique.managerId);
     boutique.owners.forEach((o) => userIds.add(o.userId));
 
-    await this.notifyUsers([...userIds], type, title, message, { boutiqueId, ...data });
+    await this.notifyUsers([...userIds], type, title, message, { boutiqueId, ...data }, socketEvent);
   }
 
   /** Notifies every admin (e.g. a boutique was just submitted and needs approval). */
@@ -52,12 +59,16 @@ export class BoutiqueNotifyService {
     title: string,
     message: string,
     data: Record<string, unknown>,
+    socketEvent?: string,
   ): Promise<void> {
     for (const uid of userIds) {
       const notification = await this.prisma.notification.create({
         data: { userId: uid, type, title, message, data: data as Prisma.InputJsonValue },
       });
       this.notificationsGateway.emitToUser(uid, notification);
+      if (socketEvent) {
+        this.notificationsGateway.emitEventToUser(uid, socketEvent, data);
+      }
     }
   }
 }

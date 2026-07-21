@@ -156,9 +156,11 @@ export class AdminService {
     });
     await this.boutiqueNotify.notifyManagers(
       id,
-      'system',
+      'boutique_request',
       'Boutique Approved',
       `${boutique.name} has been approved and is now active.`,
+      { status: boutique.status },
+      'boutique:status_changed',
     );
     return boutique;
   }
@@ -175,9 +177,11 @@ export class AdminService {
     });
     await this.boutiqueNotify.notifyManagers(
       id,
-      'system',
+      'boutique_request',
       'Boutique Rejected',
       `${boutique.name} was rejected: ${reason}`,
+      { status: boutique.status, rejectionReason: reason },
+      'boutique:status_changed',
     );
     return boutique;
   }

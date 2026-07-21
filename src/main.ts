@@ -16,6 +16,24 @@ async function bootstrap() {
   const port = configService.get<number>('app.port') || 3000;
   const corsOrigin = configService.get<string>('app.corsOrigin') || '*';
 
+  // Every JWT ever issued while running on the fallback secret is forgeable by anyone
+  // who reads this source file. Warn loudly rather than refusing to boot — this app may
+  // still be running on the fallback in production today, and crashing on startup would
+  // turn a security gap into an outage instead of giving anyone a chance to fix it first.
+  if (configService.get<string>('app.nodeEnv') === 'production') {
+    const usingDefaultSecret =
+      configService.get<string>('jwt.secret') === 'dev-jwt-secret-change-in-production';
+    const usingDefaultRefreshSecret =
+      configService.get<string>('jwt.refreshSecret') === 'dev-refresh-secret-change-in-production';
+    if (usingDefaultSecret || usingDefaultRefreshSecret) {
+      logger.error(
+        'SECURITY WARNING: JWT_SECRET and/or JWT_REFRESH_SECRET are not set in this environment — ' +
+          'running in production with the insecure default signing secret from source control. ' +
+          'Set both to strong random values in the production environment ASAP and redeploy.',
+      );
+    }
+  }
+
   app.setGlobalPrefix(apiPrefix);
 
   // Default Express body limit (100kb) is too small for product/boutique image uploads
