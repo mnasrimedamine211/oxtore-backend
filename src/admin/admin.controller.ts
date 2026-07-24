@@ -90,6 +90,12 @@ export class AdminController {
     return this.adminService.getUsers(query);
   }
 
+  @Delete('users/:id')
+  @ApiOperation({ summary: 'Permanently delete a user account and its related data (admin only)' })
+  deleteUser(@CurrentUser() admin: JwtPayload, @Param('id') id: string) {
+    return this.adminService.deleteUser(id, admin.sub);
+  }
+
   @Get('orders')
   @ApiOperation({ summary: 'List all orders across the platform (admin only)' })
   getOrders(@Query() query: QueryOrdersDto) {

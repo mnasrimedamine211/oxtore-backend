@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { BoutiqueNotifyService } from '../common/services/boutique-notify.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -268,5 +268,23 @@ export class AdminService {
         hasPrev: page > 1,
       },
     };
+  }
+
+  /**
+   * Hard delete — the schema's FK cascades (wallet, orders, notifications, settings,
+   * boutique-ownership rows) fire on a real relational delete, unlike the soft-delete
+   * `deletedAt` pattern used elsewhere in this file, which would just leave everything
+   * related to the account orphaned in place.
+   */
+  async deleteUser(id: string, adminId: string) {
+    if (id === adminId) {
+      throw new ForbiddenException('Cannot delete your own account');
+    }
+
+    const existing = await this.prisma.profile.findFirst({ where: { id, deletedAt: null } });
+    if (!existing) throw new NotFoundException('User not found');
+
+    await this.prisma.profile.delete({ where: { id } });
+    return { message: 'User deleted successfully' };
   }
 }
