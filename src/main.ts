@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
@@ -8,9 +9,15 @@ import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
+
+  // Railway (and any single-hop reverse proxy) puts an X-Forwarded-For header on every
+  // request. Without this, Express ignores that header and req.ip resolves to Railway's
+  // own proxy address — identical for every visitor — so express-rate-limit ends up
+  // rate-limiting the entire user base as if it were one client instead of per-IP.
+  app.set('trust proxy', 1);
 
   const apiPrefix = configService.get<string>('app.apiPrefix') || 'api';
   const port = configService.get<number>('app.port') || 3000;
