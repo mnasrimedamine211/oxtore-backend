@@ -157,16 +157,12 @@ export class BoutiquesService {
     };
   }
 
+  /** Viewing a boutique's profile (e.g. from a partner, a discoverable listing, or a product's
+   *  boutique link) must work for ANY authenticated user, not just its own owners/manager —
+   *  only the privileged write endpoints below are ownership-restricted. */
   async findOne(userId: string, id: string) {
     const boutique = await this.prisma.boutique.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-        OR: [
-          { managerId: userId },
-          { owners: { some: { userId } } },
-        ],
-      },
+      where: { id, deletedAt: null },
       include: {
         owners: { include: { user: true } },
         employees: { where: { deletedAt: null } },
@@ -176,6 +172,10 @@ export class BoutiquesService {
     });
     if (!boutique) throw new NotFoundException('Boutique not found');
 
+    const isOwnerOrManager =
+      boutique.managerId === userId ||
+      boutique.owners.some((o) => o.userId === userId);
+
     const revenueAgg = await this.prisma.sale.aggregate({
       where: { boutiqueId: id, deletedAt: null, status: 'completed' },
       _sum: { total: true },
@@ -183,6 +183,12 @@ export class BoutiquesService {
 
     return this.formatBoutique({
       ...boutique,
+      // Owner names/emails and employee records are only for the boutique's own
+      // owners/manager — everyone else gets the public profile shape only.
+      owners: isOwnerOrManager
+        ? boutique.owners
+        : boutique.owners.map((o) => ({ userId: o.userId })),
+      employees: isOwnerOrManager ? boutique.employees : undefined,
       _revenue: Number(revenueAgg._sum.total || 0),
     });
   }

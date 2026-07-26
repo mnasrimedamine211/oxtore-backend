@@ -149,11 +149,13 @@ export class AuthService {
     const code = this.otpService.generateOtpCode();
     await this.storeOtp(profile.id, code, 'reset');
 
-    const channel = profile.phone ? 'whatsapp' : 'email';
-    if (channel === 'whatsapp' && profile.phone) {
-      await this.otpService.sendOtp(profile.phone, code, 'whatsapp');
-    } else {
-      await this.otpService.sendOtp(profile.email, code, 'email');
+    // The reset request form only ever collects an email — always send the code there,
+    // regardless of whether the account also has a phone on file (previously this silently
+    // routed to WhatsApp/Twilio for any account with a phone, which is every real account
+    // since phone is required at signup, so the reset code never actually reached the user).
+    const sent = await this.otpService.sendOtp(profile.email, code, 'email');
+    if (!sent) {
+      this.logger.warn(`Failed to send password-reset email to profile ${profile.id}`);
     }
 
     return { message: 'If the email exists, a reset code has been sent' };
